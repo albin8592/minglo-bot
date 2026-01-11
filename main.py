@@ -134,17 +134,18 @@ async def start(message: types.Message):
         await message.answer("💜 Welcome back!", reply_markup=main_keyboard())
 
 # ================= PROFILE SETUP =================
-@dp.message(
-    lambda m:
-    m.from_user.id
-    and asyncio.create_task(check_profile_needed(m.from_user.id))
-)
+@dp.message()
 async def profile_flow(message: types.Message):
     uid = message.from_user.id
     user = await get_user(uid)
     if not user:
         return
 
+    # ✅ PROFILE COMPLETE → IGNORE
+    if user["gender"] is not None:
+        return
+
+    # NAME
     if user["name"] is None:
         await db.execute(
             "UPDATE users SET name=$1 WHERE user_id=$2",
@@ -153,6 +154,7 @@ async def profile_flow(message: types.Message):
         await message.answer("🎂 Age?")
         return
 
+    # AGE
     if user["age"] is None:
         if not message.text.isdigit() or int(message.text) < 18:
             await message.answer("❌ 18+ only")
@@ -164,6 +166,7 @@ async def profile_flow(message: types.Message):
         await message.answer("📍 Place?")
         return
 
+    # PLACE
     if user["place"] is None:
         await db.execute(
             "UPDATE users SET place=$1 WHERE user_id=$2",
@@ -175,6 +178,7 @@ async def profile_flow(message: types.Message):
         )
         return
 
+    # GENDER
     if user["gender"] is None and message.text in ["👦 Boy", "👧 Girl"]:
         await db.execute(
             "UPDATE users SET gender=$1 WHERE user_id=$2",
@@ -185,6 +189,7 @@ async def profile_flow(message: types.Message):
             reply_markup=main_keyboard()
         )
         return
+
 
 # ================= MATCH =================
 async def match_user(uid, pool, gender, message):
@@ -285,5 +290,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
