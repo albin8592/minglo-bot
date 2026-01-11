@@ -1,2 +1,1 @@
-aiogram==3.*
-asyncpg
+worker: python main.py
