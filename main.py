@@ -9,42 +9,55 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # ================= CONFIG =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+BOT_USERNAME = "minglochat_bot"
+PREMIUM_REFERRALS = 100
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 db: asyncpg.Pool = None
 
-PREMIUM_REFERRALS = 100
+# ================= STATES =================
+IDLE = "IDLE"
+WAITING = "WAITING"
+CHATTING = "CHATTING"
+
+user_state = {}
+user_mode = {}        # RANDOM / GIRLS
+waiting_random = set()
+waiting_girls = set()
+active_chats = {}
 
 # ================= BUTTONS =================
 BTN_RANDOM = "🔀 Random Chat (Free)"
-BTN_GIRLS = "👧 Find Girls"
-BTN_BOYS = "👦 Find Boys"
-BTN_INVITE = "📢 Invite & Earn Premium"
-BTN_VIP = "💎 VIP Status"
+BTN_GIRLS = "👧 Find Girls (Premium)"
 BTN_NEXT = "⏭ Next"
 BTN_STOP = "❌ Stop"
-BTN_REPORT = "🚫 Block & Report"
+BTN_INVITE = "📢 Invite & Earn Premium"
+BTN_VIP = "💎 VIP Status"
 
-# ================= MEMORY =================
-waiting = set()
-active = {}
+# ================= KEYBOARD =================
+def main_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_RANDOM)],
+            [KeyboardButton(text=BTN_GIRLS)],
+            [KeyboardButton(text=BTN_NEXT), KeyboardButton(text=BTN_STOP)],
+            [KeyboardButton(text=BTN_INVITE), KeyboardButton(text=BTN_VIP)],
+        ],
+        resize_keyboard=True
+    )
 
-# ================= DB =================
+# ================= DATABASE =================
 async def init_db():
     global db
     db = await asyncpg.create_pool(DATABASE_URL)
     await db.execute("""
     CREATE TABLE IF NOT EXISTS users(
         user_id BIGINT PRIMARY KEY,
-        name TEXT,
-        age INT,
-        place TEXT,
         gender TEXT,
         referrals INT DEFAULT 0,
         premium BOOLEAN DEFAULT FALSE
-    );
+    )
     """)
 
 async def get_user(uid):
@@ -56,28 +69,6 @@ async def create_user(uid):
         uid
     )
 
-# ================= KEYBOARD =================
-def main_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_RANDOM)],
-            [KeyboardButton(text=BTN_GIRLS), KeyboardButton(text=BTN_BOYS)],
-            [KeyboardButton(text=BTN_NEXT), KeyboardButton(text=BTN_STOP)],
-            [KeyboardButton(text=BTN_INVITE)],
-            [KeyboardButton(text=BTN_VIP), KeyboardButton(text=BTN_REPORT)],
-        ],
-        resize_keyboard=True
-    )
-
-def gender_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="👦 Boy"), KeyboardButton(text="👧 Girl")]],
-        resize_keyboard=True
-    )
-
-def mask(name):
-    return name[0] + "***"
-
 # ================= START =================
 @dp.message(Command("start"))
 async def start(message: types.Message):
@@ -85,124 +76,111 @@ async def start(message: types.Message):
     args = message.text.split()
 
     await create_user(uid)
+    user_state[uid] = IDLE
 
-    # referral
+    # Referral system
     if len(args) == 2 and args[1].isdigit():
         ref = int(args[1])
         if ref != uid:
+            await db.execute(
+                "UPDATE users SET referrals = referrals + 1 WHERE user_id=$1",
+                ref
+            )
             ref_user = await get_user(ref)
-            if ref_user:
+            if ref_user and ref_user["referrals"] >= PREMIUM_REFERRALS and not ref_user["premium"]:
                 await db.execute(
-                    "UPDATE users SET referrals=referrals+1 WHERE user_id=$1",
+                    "UPDATE users SET premium=TRUE WHERE user_id=$1",
                     ref
                 )
-                ref_user = await get_user(ref)
-                if ref_user["referrals"] >= PREMIUM_REFERRALS and not ref_user["premium"]:
-                    await db.execute(
-                        "UPDATE users SET premium=TRUE WHERE user_id=$1",
-                        ref
-                    )
-                    await bot.send_message(ref, "🎉 Congrats! You are now *PREMIUM* 💎", parse_mode="Markdown")
+                await bot.send_message(ref, "🎉 You are now *PREMIUM* 💎", parse_mode="Markdown")
 
-    user = await get_user(uid)
+    await message.answer(
+        "💜 *Welcome to Minglo Chat*\n\nChoose an option 👇",
+        reply_markup=main_kb(),
+        parse_mode="Markdown"
+    )
 
-    if user["name"] is None:
-        await message.answer("👤 Your name?")
-    else:
-        await message.answer("💜 Welcome to *Minglo Chat*", reply_markup=main_kb(), parse_mode="Markdown")
-
-# ================= PROFILE =================
-@dp.message()
-async def profile_flow(message: types.Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    if not user:
+# ================= MATCH ENGINE =================
+async def start_search(uid, message, mode):
+    if user_state.get(uid) == CHATTING:
+        await message.answer("❌ Already chatting\nUse ⏭ Next or ❌ Stop")
         return
 
-    if user["gender"]:
-        return
+    user_state[uid] = WAITING
+    user_mode[uid] = mode
 
-    if user["name"] is None:
-        await db.execute("UPDATE users SET name=$1 WHERE user_id=$2", message.text, uid)
-        await message.answer("🎂 Age?")
-        return
+    pool = waiting_random if mode == "RANDOM" else waiting_girls
 
-    if user["age"] is None:
-        if not message.text.isdigit() or int(message.text) < 18:
-            await message.answer("❌ 18+ only")
-            return
-        await db.execute("UPDATE users SET age=$1 WHERE user_id=$2", int(message.text), uid)
-        await message.answer("📍 Place?")
-        return
+    for other in list(pool):
+        if other != uid:
+            pool.remove(other)
 
-    if user["place"] is None:
-        await db.execute("UPDATE users SET place=$1 WHERE user_id=$2", message.text, uid)
-        await message.answer("👤 Select Gender", reply_markup=gender_kb())
-        return
+            active_chats[uid] = other
+            active_chats[other] = uid
+            user_state[uid] = CHATTING
+            user_state[other] = CHATTING
 
-    if user["gender"] is None and message.text in ["👦 Boy", "👧 Girl"]:
-        await db.execute("UPDATE users SET gender=$1 WHERE user_id=$2", message.text, uid)
-        await message.answer("✅ Profile completed!", reply_markup=main_kb())
-        return
-
-# ================= MATCH =================
-async def try_match(uid, message):
-    if uid in active:
-        await message.answer("❌ You are already chatting.\nUse ⏭ Next or ❌ Stop")
-        return
-
-    for other in list(waiting):
-        if other != uid and other not in active:
-            waiting.remove(other)
-            active[uid] = other
-            active[other] = uid
-
-            me = await get_user(uid)
-            him = await get_user(other)
-
-            await bot.send_message(
-                uid,
-                f"🎉 Match Found!\n👤 {mask(him['name'])}, {him['age']}, {him['place']}",
-                reply_markup=main_kb()
-            )
-            await bot.send_message(
-                other,
-                f"🎉 Match Found!\n👤 {mask(me['name'])}, {me['age']}, {me['place']}",
-                reply_markup=main_kb()
-            )
+            await bot.send_message(uid, "🎉 Match found!", reply_markup=main_kb())
+            await bot.send_message(other, "🎉 Match found!", reply_markup=main_kb())
             return
 
-    waiting.add(uid)
+    pool.add(uid)
     await message.answer("⏳ Waiting for a partner...")
 
 # ================= BUTTON HANDLERS =================
 @dp.message(lambda m: m.text == BTN_RANDOM)
 async def random_chat(message: types.Message):
-    await try_match(message.from_user.id, message)
+    await start_search(message.from_user.id, message, "RANDOM")
+
+@dp.message(lambda m: m.text == BTN_GIRLS)
+async def find_girls(message: types.Message):
+    uid = message.from_user.id
+    user = await get_user(uid)
+
+    if not user or not user["premium"]:
+        await message.answer("💎 Premium required\nInvite 100 users to unlock")
+        return
+
+    await start_search(uid, message, "GIRLS")
 
 @dp.message(lambda m: m.text == BTN_NEXT)
 async def next_chat(message: types.Message):
     uid = message.from_user.id
-    if uid in active:
-        other = active.pop(uid)
-        active.pop(other, None)
-        await bot.send_message(other, "⏭ Partner moved to next chat")
-    await try_match(uid, message)
+
+    if user_state.get(uid) != CHATTING:
+        await message.answer("⚠️ You are not chatting")
+        return
+
+    other = active_chats.pop(uid)
+    active_chats.pop(other, None)
+
+    user_state[uid] = IDLE
+    user_state[other] = IDLE
+
+    await bot.send_message(other, "⏭ Partner moved to next chat")
+
+    await start_search(uid, message, user_mode.get(uid, "RANDOM"))
 
 @dp.message(lambda m: m.text == BTN_STOP)
 async def stop_chat(message: types.Message):
     uid = message.from_user.id
-    if uid in active:
-        other = active.pop(uid)
-        active.pop(other, None)
+
+    if user_state.get(uid) == CHATTING:
+        other = active_chats.pop(uid)
+        active_chats.pop(other, None)
+        user_state[other] = IDLE
         await bot.send_message(other, "❌ Partner stopped chat")
-    waiting.discard(uid)
+
+    waiting_random.discard(uid)
+    waiting_girls.discard(uid)
+    user_state[uid] = IDLE
+
     await message.answer("🛑 Chat stopped", reply_markup=main_kb())
 
 @dp.message(lambda m: m.text == BTN_INVITE)
 async def invite(message: types.Message):
     uid = message.from_user.id
-    link = f"https://t.me/minglochat_bot?start={uid}"
+    link = f"https://t.me/{BOT_USERNAME}?start={uid}"
     await message.answer(
         f"🎁 *Invite & Earn Premium*\n\n"
         f"🔗 {link}\n\n"
@@ -211,7 +189,7 @@ async def invite(message: types.Message):
     )
 
 @dp.message(lambda m: m.text == BTN_VIP)
-async def vip(message: types.Message):
+async def vip_status(message: types.Message):
     user = await get_user(message.from_user.id)
     status = "💎 PREMIUM" if user["premium"] else "🆓 FREE"
     await message.answer(
@@ -221,15 +199,15 @@ async def vip(message: types.Message):
         parse_mode="Markdown"
     )
 
-# ================= RELAY =================
-@dp.message(lambda m: m.from_user.id in active and not m.text.startswith("/"))
+# ================= MESSAGE RELAY =================
+@dp.message(lambda m: m.from_user.id in active_chats)
 async def relay(message: types.Message):
-    await bot.send_message(active[message.from_user.id], message.text)
+    await bot.send_message(active_chats[message.from_user.id], message.text)
 
 # ================= RUN =================
 async def main():
     await init_db()
-    print("🔥 Minglo Bot Running – Stable Version")
+    print("🔥 Minglo Bot Running – PROFESSIONAL BUILD")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
