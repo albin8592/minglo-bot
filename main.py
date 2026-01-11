@@ -134,14 +134,22 @@ async def start(message: types.Message):
         await message.answer("💜 Welcome back!", reply_markup=main_keyboard())
 
 # ================= PROFILE SETUP =================
-@dp.message(lambda m: True)
+@dp.message(
+    lambda m:
+    m.from_user.id
+    and asyncio.create_task(check_profile_needed(m.from_user.id))
+)
 async def profile_flow(message: types.Message):
     uid = message.from_user.id
     user = await get_user(uid)
-    if not user: return
+    if not user:
+        return
 
     if user["name"] is None:
-        await db.execute("UPDATE users SET name=$1 WHERE user_id=$2", message.text, uid)
+        await db.execute(
+            "UPDATE users SET name=$1 WHERE user_id=$2",
+            message.text, uid
+        )
         await message.answer("🎂 Age?")
         return
 
@@ -149,18 +157,33 @@ async def profile_flow(message: types.Message):
         if not message.text.isdigit() or int(message.text) < 18:
             await message.answer("❌ 18+ only")
             return
-        await db.execute("UPDATE users SET age=$1 WHERE user_id=$2", int(message.text), uid)
+        await db.execute(
+            "UPDATE users SET age=$1 WHERE user_id=$2",
+            int(message.text), uid
+        )
         await message.answer("📍 Place?")
         return
 
     if user["place"] is None:
-        await db.execute("UPDATE users SET place=$1 WHERE user_id=$2", message.text, uid)
-        await message.answer("Select gender", reply_markup=gender_keyboard())
+        await db.execute(
+            "UPDATE users SET place=$1 WHERE user_id=$2",
+            message.text, uid
+        )
+        await message.answer(
+            "Select gender",
+            reply_markup=gender_keyboard()
+        )
         return
 
     if user["gender"] is None and message.text in ["👦 Boy", "👧 Girl"]:
-        await db.execute("UPDATE users SET gender=$1 WHERE user_id=$2", message.text, uid)
-        await message.answer("✅ Profile Completed", reply_markup=main_keyboard())
+        await db.execute(
+            "UPDATE users SET gender=$1 WHERE user_id=$2",
+            message.text, uid
+        )
+        await message.answer(
+            "✅ Profile Completed",
+            reply_markup=main_keyboard()
+        )
         return
 
 # ================= MATCH =================
@@ -237,3 +260,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
