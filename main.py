@@ -188,35 +188,60 @@ async def profile_flow(message: types.Message):
 
 # ================= MATCH =================
 async def match_user(uid, pool, gender, message):
+    # already chatting?
+    if uid in active_chats:
+        await message.answer("❌ You are already in a chat")
+        return
+
     searching = await message.answer("🔎 Searching...")
 
-    users = await db.fetch("""
-    SELECT * FROM users
-    WHERE gender IS NOT NULL
-    """)
+    # 🔹 TRY MATCH FROM WAITING POOL
+    for waiting_uid in list(pool):
+        if waiting_uid == uid:
+            continue
+        if waiting_uid in active_chats:
+            pool.discard(waiting_uid)
+            continue
 
-    random.shuffle(users)
+        partner = await get_user(waiting_uid)
+        me = await get_user(uid)
 
-    for u in users:
-        pid = u["user_id"]
-        if pid == uid: continue
-        if pid in active_chats: continue
-        if gender and u["gender"] != gender: continue
+        if not partner or not me:
+            pool.discard(waiting_uid)
+            continue
 
-        active_chats[uid] = pid
-        active_chats[pid] = uid
+        if gender and partner["gender"] != gender:
+            continue
+
+        # ✅ MATCH FOUND
+        pool.discard(waiting_uid)
+        active_chats[uid] = waiting_uid
+        active_chats[waiting_uid] = uid
         await searching.delete()
 
         await bot.send_message(
             uid,
-            f"🎉 Match!\nName: {mask_name(u['name'])}\nAge:{u['age']}\nPlace:{u['place']}",
+            f"🎉 Match found!\n"
+            f"Name: {mask_name(partner['name'])}\n"
+            f"Age: {partner['age']}\n"
+            f"Place: {partner['place']}",
             reply_markup=main_keyboard()
         )
-        await bot.send_message(pid, "🎉 Match found!", reply_markup=main_keyboard())
+
+        await bot.send_message(
+            waiting_uid,
+            f"🎉 Match found!\n"
+            f"Name: {mask_name(me['name'])}\n"
+            f"Age: {me['age']}\n"
+            f"Place: {me['place']}",
+            reply_markup=main_keyboard()
+        )
         return
 
+    # 🔹 NO MATCH → WAIT
     pool.add(uid)
-    await searching.edit_text("⏳ Waiting for partner...")
+    await searching.edit_text("⏳ Waiting for a partner...")
+
 
 # ================= CHAT BUTTONS =================
 @dp.message(lambda m: m.text == "🔀 Random Chat (Free)")
@@ -260,4 +285,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
