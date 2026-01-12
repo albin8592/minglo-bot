@@ -47,6 +47,13 @@ async def init_db():
             text TEXT,
             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
+            await con.execute("""
+        CREATE TABLE IF NOT EXISTS stars_log(
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            stars INT,
+            time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
 
 # ---------------- DB HELPERS ----------------
 async def add_user(uid):
@@ -112,6 +119,7 @@ def main_keyboard():
         [KeyboardButton(text="🔀 Random Chat (Free)")],
         [KeyboardButton(text="👧 Find Girls"), KeyboardButton(text="👦 Find Boys")],
         [KeyboardButton(text="📢 Invite & Earn Premium")],
+        [KeyboardButton(text="🎁 Send Stars as Gift")]
         [KeyboardButton(text="💎 VIP Status")],
         [KeyboardButton(text="⏭ Next"), KeyboardButton(text="❌ Stop")],
         [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")],
@@ -449,6 +457,20 @@ async def vip_status(message: types.Message):
         f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n"
         f"🎁 VIP Features:\n{features_text}"
     )
+ # ---------------- STARS GIFT MENU ----------------
+@dp.message(lambda m: m.text == "🎁 Send Stars as Gift")
+async def stars_menu(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ 10 Stars", callback_data="stars_10")],
+        [InlineKeyboardButton(text="⭐ 50 Stars", callback_data="stars_50")],
+        [InlineKeyboardButton(text="⭐ 100 Stars", callback_data="stars_100")],
+    ])
+
+    await message.answer(
+        "🎁 Support Minglo Bot\n\n"
+        "Stars help us run & improve the bot 💜",
+        reply_markup=kb
+    )
 
 # ---------------- SUPPORT ----------------
 @dp.message(Command("support"))
@@ -557,6 +579,30 @@ async def admin_cb(c: CallbackQuery):
         await c.message.answer(text)
 
     await c.answer()
+# ---------------- STARS CALLBACK → INVOICE ----------------
+@dp.callback_query(lambda c: c.data.startswith("stars_"))
+async def send_stars_invoice(callback: CallbackQuery, bot: Bot):
+    stars = int(callback.data.split("_")[1])
+
+    prices = [types.LabeledPrice(
+        label=f"{stars} Telegram Stars",
+        amount=stars   # ⭐ Stars = amount
+    )]
+
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="🎁 Support Minglo Bot",
+        description=f"Gift {stars} Stars to support the bot 💜",
+        payload=f"stars_{stars}",
+        currency="XTR",  # Telegram Stars currency
+        prices=prices
+    )
+
+    await callback.answer()
+# ---------------- PRE-CHECKOUT (STARS) ----------------
+@dp.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
+    await pre_checkout_query.answer(ok=True)
 
 
 # admin action handler
@@ -620,6 +666,28 @@ async def admin_action(message: types.Message):
     # clear admin state
     admin_state.pop(message.from_user.id, None)
 
+# ---------------- STARS PAYMENT SUCCESS ----------------
+@dp.message(lambda m: m.successful_payment is not None)
+async def stars_payment_success(message: types.Message):
+    stars = message.successful_payment.total_amount  # ⭐ Stars count
+    user_id = message.from_user.id
+
+    # OPTIONAL: Save to DB
+    try:
+        async with db_pool.acquire() as con:
+            await con.execute(
+                "INSERT INTO stars_log (user_id, stars) VALUES ($1, $2)",
+                user_id, stars
+            )
+    except:
+        pass
+
+    await message.answer(
+        f"💜 Thank you!\n\n"
+        f"🎁 You gifted *{stars} Stars*\n"
+        f"Your support keeps the bot alive 🚀",
+        parse_mode="Markdown"
+    )
 
 # ---------------- RUN ----------------
 async def main():
@@ -629,6 +697,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
