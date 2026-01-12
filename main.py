@@ -115,8 +115,6 @@ def main_keyboard():
         [KeyboardButton(text="💎 VIP Status")],
         [KeyboardButton(text="⏭ Next"), KeyboardButton(text="❌ Stop")],
         [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")],
-        [KeyboardButton(text="/start"), KeyboardButton(text="/support")],
-        [KeyboardButton(text="/premium"), KeyboardButton(text="/about")]
     ])
 
 def gender_keyboard():
@@ -631,6 +629,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
