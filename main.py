@@ -163,10 +163,11 @@ async def start(message: types.Message):
         await message.answer("💜 Welcome back!", reply_markup=main_keyboard())
 
 # ---------------- PROFILE FLOW (SAFE) ----------------
+# ---------------- PROFILE FLOW (SAFE) ----------------
 @dp.message(
     lambda m:
         not m.text.startswith("/") and
-        m.from_user.id not in active_chats and   # ✅ ADD THIS
+        m.from_user.id not in active_chats and
         m.text not in [
             "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
             "📢 Invite & Earn Premium", "💎 VIP Status",
@@ -207,24 +208,24 @@ async def profile_flow(message: types.Message):
         return
 
     # 4️⃣ GENDER
-# 4️⃣ GENDER
-if user["gender"] is None:
-    if text not in ["👦 Boy", "👧 Girl"]:
-        return  # Python-ന് block വേണം
+    if user["gender"] is None:
+        if text not in ["👦 Boy", "👧 Girl"]:
+            return  # invalid input, ignore
 
-    await update_user(uid, "gender", text)
-    waiting_random.add(uid)
+        await update_user(uid, "gender", text)
+        waiting_random.add(uid)
 
-    if text == "👧 Girl":
-        waiting_find_girls.add(uid)
-    else:
-        waiting_find_boys.add(uid)
+        if text == "👧 Girl":
+            waiting_find_girls.add(uid)
+        else:
+            waiting_find_boys.add(uid)
 
-    await message.answer(
-        "✅ Profile completed!\n💡 You are now discoverable",
-        reply_markup=main_keyboard()
-    )
-    return
+        await message.answer(
+            "✅ Profile completed!\n💡 You are now discoverable",
+            reply_markup=main_keyboard()
+        )
+        return
+
 
 
 
@@ -444,6 +445,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
