@@ -237,6 +237,7 @@ async def profile_flow(message: types.Message):
 
 
 # ---------------- MATCH ----------------
+# ---------------- MATCH ----------------
 async def try_match(uid, queue, want_gender, message):
     remove_from_all_queues(uid)
     me = await get_user(uid)
@@ -267,14 +268,16 @@ async def try_match(uid, queue, want_gender, message):
         active_chats[uid] = other_id
         active_chats[other_id] = uid
 
-        try: await msg.delete()
-        except: pass
+        try:
+            await msg.delete()
+        except Exception:
+            pass
 
         # notify both
         try:
             await bot.send_message(uid, f"🎉 Match Found\n👤 {mask(other)}", reply_markup=main_keyboard())
             await bot.send_message(other_id, f"🎉 Match Found\n👤 {mask(me)}", reply_markup=main_keyboard())
-            except Exception as e:
+        except Exception as e:
             print(f"MATCH NOTIFY ERROR: {e}")
 
         return
@@ -282,7 +285,8 @@ async def try_match(uid, queue, want_gender, message):
     queue.add(uid)
     try:
         await msg.edit_text("⏳ Waiting for partner...")
-    except: pass
+    except Exception:
+        pass
 
 # ---------------- CHAT BUTTONS ----------------
 @dp.message(lambda m: m.text in ["🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys"])
@@ -502,6 +506,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
