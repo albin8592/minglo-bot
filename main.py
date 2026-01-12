@@ -667,62 +667,62 @@ async def admin_action(message: types.Message):
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-     # ---------------- BROADCAST ----------------
-elif action == "admin_broadcast":
-    async with db_pool.acquire() as con:
-        users = await con.fetch("SELECT user_id FROM users")
+        elif action == "admin_broadcast":
+            async with db_pool.acquire() as con:
+                users = await con.fetch("SELECT user_id FROM users")
 
-    success = 0
-    failed = 0
+            success = 0
+            failed = 0
 
-    # Determine what kind of message was sent
-    if message.photo:
-        media_type = "photo"
-        file_id = message.photo[-1].file_id
-        caption = message.caption or ""
-    elif message.video:
-        media_type = "video"
-        file_id = message.video.file_id
-        caption = message.caption or ""
-    else:
-        media_type = "text"
-        text = message.text
+            # Determine message type
+            if message.photo:
+                media_type = "photo"
+                file_id = message.photo[-1].file_id
+                caption = message.caption or ""
+            elif message.video:
+                media_type = "video"
+                file_id = message.video.file_id
+                caption = message.caption or ""
+            else:
+                media_type = "text"
+                text = message.text
 
-    for u in users:
-        try:
-            if media_type == "photo":
-                await bot.send_photo(
-                    chat_id=u["user_id"],
-                    photo=file_id,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-            elif media_type == "video":
-                await bot.send_video(
-                    chat_id=u["user_id"],
-                    video=file_id,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-            elif media_type == "text":
-                await bot.send_message(
-                    chat_id=u["user_id"],
-                    text=text,
-                    parse_mode="HTML"
-                )
-            success += 1
-            await asyncio.sleep(0.05)
-        except Exception as e:
-            failed += 1
-            print(f"Broadcast failed for {u['user_id']}: {e}")
+            for u in users:
+                try:
+                    if media_type == "photo":
+                        await bot.send_photo(
+                            chat_id=u["user_id"],
+                            photo=file_id,
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                    elif media_type == "video":
+                        await bot.send_video(
+                            chat_id=u["user_id"],
+                            video=file_id,
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                    elif media_type == "text":
+                        await bot.send_message(
+                            chat_id=u["user_id"],
+                            text=text,
+                            parse_mode="HTML"
+                        )
+                    success += 1
+                    await asyncio.sleep(0.05)
+                except Exception as e:
+                    failed += 1
+                    print(f"Broadcast failed for {u['user_id']}: {e}")
 
-    await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
+            await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
 
-   except Exception as e:
+    except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
     # clear admin state
     admin_state.pop(message.from_user.id, None)
+
 
 # ---------------- STARS PAYMENT SUCCESS ----------------
 @dp.message(lambda m: m.successful_payment is not None)
@@ -755,6 +755,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
