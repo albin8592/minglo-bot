@@ -1,29 +1,33 @@
-import os, asyncio, random, asyncpg
+import os, asyncio, random, time
+import asyncpg, redis
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import (
-    ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-)
+from aiogram.types import *
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DATABASE_URL = os.getenv("DATABASE_URL")
+REDIS_URL = os.getenv("REDIS_URL")
 
 FREE_SKIP_LIMIT = 5
 PREMIUM_REFERRALS = 100
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-db_pool = None
 
-# ---------------- DATABASE ----------------
+db: asyncpg.Pool = None
+rdb = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+
+active_chats = {}
+admin_state = {}
+
+# ---------------- DB INIT ----------------
 async def init_db():
-    global db_pool
-    db_pool = await asyncpg.create_pool(DATABASE_URL)
-    async with db_pool.acquire() as con:
+    global db
+    db = await asyncpg.create_pool(DATABASE_URL)
+    async with db.acquire() as con:
         await con.execute("""
         CREATE TABLE IF NOT EXISTS users(
             user_id BIGINT PRIMARY KEY,
@@ -33,75 +37,50 @@ async def init_db():
             gender TEXT,
             premium BOOLEAN DEFAULT FALSE,
             referrals INT DEFAULT 0,
-            badge_type TEXT
-        )""")
-        await con.execute("""
-        CREATE TABLE IF NOT EXISTS banned_users(
-            user_id BIGINT PRIMARY KEY
-        )""")
-        await con.execute("""
-        CREATE TABLE IF NOT EXISTS messages(
+            skips INT DEFAULT 0,
+            badge TEXT,
+            banned BOOLEAN DEFAULT FALSE
+        );
+        CREATE TABLE IF NOT EXISTS blocks(
+            user_id BIGINT,
+            blocked_id BIGINT,
+            PRIMARY KEY(user_id, blocked_id)
+        );
+        CREATE TABLE IF NOT EXISTS messages_log(
             id SERIAL PRIMARY KEY,
             sender BIGINT,
             receiver BIGINT,
             text TEXT,
-            time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
+            created TIMESTAMP DEFAULT NOW()
+        );
+        """)
 
 # ---------------- DB HELPERS ----------------
-async def add_user(uid):
-    async with db_pool.acquire() as con:
+async def get_user(uid):
+    async with db.acquire() as con:
+        r = await con.fetchrow("SELECT * FROM users WHERE user_id=$1", uid)
+        return dict(r) if r else None
+
+async def create_user(uid):
+    async with db.acquire() as con:
         await con.execute(
             "INSERT INTO users(user_id) VALUES($1) ON CONFLICT DO NOTHING", uid
         )
 
-async def get_user(uid):
-    async with db_pool.acquire() as con:
-        row = await con.fetchrow("SELECT * FROM users WHERE user_id=$1", uid)
-        return dict(row) if row else None
+async def update(uid, field, val):
+    async with db.acquire() as con:
+        await con.execute(f"UPDATE users SET {field}=$1 WHERE user_id=$2", val, uid)
 
-async def update_user(uid, field, value):
-    async with db_pool.acquire() as con:
-        await con.execute(
-            f"UPDATE users SET {field}=$1 WHERE user_id=$2", value, uid
+async def is_blocked(uid, pid):
+    async with db.acquire() as con:
+        r = await con.fetchrow(
+            "SELECT 1 FROM blocks WHERE user_id=$1 AND blocked_id=$2",
+            uid, pid
         )
-
-async def is_banned(uid):
-    async with db_pool.acquire() as con:
-        return await con.fetchval(
-            "SELECT 1 FROM banned_users WHERE user_id=$1", uid
-        ) is not None
-
-async def ban_user(uid):
-    async with db_pool.acquire() as con:
-        await con.execute(
-            "INSERT INTO banned_users VALUES($1) ON CONFLICT DO NOTHING", uid
-        )
-
-async def unban_user(uid):
-    async with db_pool.acquire() as con:
-        await con.execute(
-            "DELETE FROM banned_users WHERE user_id=$1", uid
-        )
-
-async def log_message(sender, receiver, text):
-    async with db_pool.acquire() as con:
-        await con.execute(
-            "INSERT INTO messages(sender,receiver,text) VALUES($1,$2,$3)",
-            sender, receiver, text
-        )
-
-# ---------------- MEMORY ----------------
-waiting_random = set()
-waiting_girls = set()
-waiting_boys = set()
-active_chats = {}
-blocked = {}
-skips = {}
-admin_state = {}
+        return bool(r)
 
 # ---------------- KEYBOARDS ----------------
-def main_keyboard():
+def main_kb():
     return ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
         [KeyboardButton(text="🔀 Random Chat (Free)")],
         [KeyboardButton(text="👧 Find Girls"), KeyboardButton(text="👦 Find Boys")],
@@ -111,243 +90,195 @@ def main_keyboard():
         [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")]
     ])
 
-def gender_keyboard():
+def gender_kb():
     return ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
         [KeyboardButton(text="👦 Boy"), KeyboardButton(text="👧 Girl")]
     ])
 
-# ---------------- UTIL ----------------
-async def check_banned(message):
-    if await is_banned(message.from_user.id):
-        await message.answer("🚫 You are banned.")
-        return True
-    return False
-
-def mask(name):
-    return name[0] + "***" if name else "User"
-
-# ---------------- START + REFERRAL ----------------
+# ---------------- START ----------------
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    if await check_banned(message): return
-
-    uid = message.from_user.id
-    args = message.text.split()
-    await add_user(uid)
-
-    if len(args) > 1 and args[1].isdigit():
-        ref = int(args[1])
-        if ref != uid:
-            async with db_pool.acquire() as con:
-                await con.execute(
-                    "UPDATE users SET referrals=referrals+1 WHERE user_id=$1", ref
-                )
-                cnt = await con.fetchval(
-                    "SELECT referrals FROM users WHERE user_id=$1", ref
-                )
-                if cnt >= PREMIUM_REFERRALS:
-                    await con.execute(
-                        "UPDATE users SET premium=TRUE, badge_type='invite' WHERE user_id=$1", ref
-                    )
-
+async def start(m: types.Message):
+    uid = m.from_user.id
+    await create_user(uid)
     user = await get_user(uid)
+
+    if user["banned"]:
+        await m.answer("🚫 You are banned.")
+        return
+
     if user["name"] is None:
-        await message.answer("👤 Your name?")
+        await m.answer("👤 Your name?")
     else:
-        await message.answer("💜 Welcome back!", reply_markup=main_keyboard())
+        await m.answer("💜 Welcome back!", reply_markup=main_kb())
 
-# ---------------- PROFILE FLOW (SAFE) ----------------
-@dp.message(
-    lambda m: not m.text.startswith("/") and m.text not in [
-        "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
-        "📢 Invite & Earn Premium", "💎 VIP Status",
-        "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
-    ]
-)
-async def profile_flow(message: types.Message):
-    if await check_banned(message): return
-    uid = message.from_user.id
+# ---------------- PROFILE FLOW ----------------
+@dp.message(lambda m: True)
+async def profile(m: types.Message):
+    uid = m.from_user.id
     user = await get_user(uid)
+    if not user or user["banned"]:
+        return
 
     if user["name"] is None:
-        await update_user(uid, "name", message.text)
-        await message.answer("🎂 Age (18+)?")
+        await update(uid, "name", m.text)
+        await m.answer("🎂 Age (18+)?")
         return
 
     if user["age"] is None:
-        if not message.text.isdigit() or int(message.text) < 18:
-            await message.answer("❌ 18+ only")
+        if not m.text.isdigit() or int(m.text) < 18:
+            await m.answer("❌ 18+ only")
             return
-        await update_user(uid, "age", int(message.text))
-        await message.answer("📍 Place?")
+        await update(uid, "age", int(m.text))
+        await m.answer("📍 Place?")
         return
 
     if user["place"] is None:
-        await update_user(uid, "place", message.text)
-        await message.answer("Select gender:", reply_markup=gender_keyboard())
+        await update(uid, "place", m.text)
+        await m.answer("Gender?", reply_markup=gender_kb())
         return
 
     if user["gender"] is None:
-        if message.text not in ["👦 Boy", "👧 Girl"]: return
-        await update_user(uid, "gender", message.text)
-        await message.answer("✅ Profile completed", reply_markup=main_keyboard())
-
-# ---------------- MATCH ----------------
-async def match_user(uid, pool, gender, message):
-    msg = await message.answer("🔎 Searching...")
-    for u in list(pool):
-        if u != uid and u not in active_chats:
-            user = await get_user(u)
-            if user and (gender is None or user["gender"] == gender):
-                pool.discard(u)
-                active_chats[uid] = u
-                active_chats[u] = uid
-                await msg.delete()
-                await message.answer(
-                    f"🎉 Match Found\nName: {mask(user['name'])}",
-                    reply_markup=main_keyboard()
-                )
-                return
-    pool.add(uid)
-    await msg.edit_text("⏳ Waiting for partner...")
-
-# ---------------- CHAT BUTTONS ----------------
-@dp.message(lambda m: m.text in ["🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys"])
-async def start_chat(message: types.Message):
-    if await check_banned(message): return
-    uid = message.from_user.id
-    user = await get_user(uid)
-
-    if uid in active_chats:
-        await message.answer("❌ Already in chat")
+        if m.text not in ["👦 Boy", "👧 Girl"]:
+            return
+        await update(uid, "gender", m.text)
+        await m.answer("✅ Profile completed!", reply_markup=main_kb())
         return
 
-    if message.text == "🔀 Random Chat (Free)":
-        await match_user(uid, waiting_random, None, message)
+# ---------------- MATCH ENGINE (REDIS) ----------------
+async def try_match(uid, queue, target_gender=None):
+    user = await get_user(uid)
 
-    elif message.text == "👧 Find Girls":
-        if not user["premium"]:
-            await message.answer("💎 Premium required")
-            return
-        await match_user(uid, waiting_girls, "👧 Girl", message)
+    for pid in rdb.smembers(queue):
+        pid = int(pid)
+        if pid == uid or pid in active_chats:
+            rdb.srem(queue, pid)
+            continue
 
-    elif message.text == "👦 Find Boys":
-        if not user["premium"]:
-            await message.answer("💎 Premium required")
-            return
-        await match_user(uid, waiting_boys, "👦 Boy", message)
+        puser = await get_user(pid)
+        if not puser or puser["banned"]:
+            rdb.srem(queue, pid)
+            continue
 
-# ---------------- NEXT / STOP ----------------
-@dp.message(lambda m: m.text == "⏭ Next")
-async def next_chat(message: types.Message):
-    uid = message.from_user.id
-    if uid in active_chats:
-        pid = active_chats.pop(uid)
-        active_chats.pop(pid, None)
-        await bot.send_message(pid, "❌ Partner skipped")
-    await match_user(uid, waiting_random, None, message)
+        if target_gender and puser["gender"] != target_gender:
+            continue
 
+        if await is_blocked(uid, pid) or await is_blocked(pid, uid):
+            continue
+
+        rdb.srem(queue, pid)
+        active_chats[uid] = pid
+        active_chats[pid] = uid
+
+        await bot.send_message(uid, "🎉 Match Found!", reply_markup=main_kb())
+        await bot.send_message(pid, "🎉 Match Found!", reply_markup=main_kb())
+        return
+
+    rdb.sadd(queue, uid)
+    await bot.send_message(uid, "⏳ Waiting for partner...")
+
+# ---------------- CHAT BUTTONS ----------------
+@dp.message(lambda m: m.text == "🔀 Random Chat (Free)")
+async def random_chat(m: types.Message):
+    await try_match(m.from_user.id, "wait:random")
+
+@dp.message(lambda m: m.text == "👧 Find Girls")
+async def girls(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if not u["premium"]:
+        await m.answer("💎 Premium required")
+        return
+    await try_match(m.from_user.id, "wait:girls", "👧 Girl")
+
+@dp.message(lambda m: m.text == "👦 Find Boys")
+async def boys(m: types.Message):
+    u = await get_user(m.from_user.id)
+    if not u["premium"]:
+        await m.answer("💎 Premium required")
+        return
+    await try_match(m.from_user.id, "wait:boys", "👦 Boy")
+
+# ---------------- RELAY ----------------
+@dp.message(lambda m: m.from_user.id in active_chats)
+async def relay(m: types.Message):
+    uid = m.from_user.id
+    pid = active_chats.get(uid)
+    if not pid:
+        return
+
+    async with db.acquire() as con:
+        await con.execute(
+            "INSERT INTO messages_log(sender,receiver,text) VALUES($1,$2,$3)",
+            uid, pid, m.text
+        )
+
+    await bot.send_message(pid, m.text)
+
+# ---------------- STOP ----------------
 @dp.message(lambda m: m.text == "❌ Stop")
-async def stop_chat(message: types.Message):
-    uid = message.from_user.id
+async def stop(m: types.Message):
+    uid = m.from_user.id
     if uid in active_chats:
         pid = active_chats.pop(uid)
         active_chats.pop(pid, None)
         await bot.send_message(pid, "❌ Chat ended")
-    await message.answer("✅ Chat stopped")
+    await m.answer("✅ Stopped")
 
-# ---------------- BLOCK / UNBLOCK ----------------
+# ---------------- BLOCK ----------------
 @dp.message(lambda m: m.text == "🚫 Block & Report")
-async def block_user(message: types.Message):
-    uid = message.from_user.id
-    if uid in active_chats:
-        pid = active_chats.pop(uid)
-        active_chats.pop(pid, None)
-        blocked.setdefault(uid, []).append(pid)
-        await bot.send_message(pid, "🚫 You were blocked")
-    await message.answer("🚫 User blocked")
-
-@dp.message(lambda m: m.text == "✅ Unblock")
-async def unblock_user(message: types.Message):
-    uid = message.from_user.id
-    if uid not in blocked or not blocked[uid]:
-        await message.answer("❌ No blocked users")
-        return
-    text = "Blocked users:\n" + "\n".join(map(str, blocked[uid]))
-    await message.answer(text)
-
-# ---------------- INVITE / VIP ----------------
-@dp.message(lambda m: m.text == "📢 Invite & Earn Premium")
-async def invite(message: types.Message):
-    uid = message.from_user.id
-    user = await get_user(uid)
-    link = f"https://t.me/{(await bot.get_me()).username}?start={uid}"
-    await message.answer(
-        f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n🔗 {link}"
-    )
-
-@dp.message(lambda m: m.text == "💎 VIP Status")
-async def vip_status(message: types.Message):
-    user = await get_user(message.from_user.id)
-    await message.answer(
-        f"💎 VIP: {'YES' if user['premium'] else 'NO'}\n"
-        f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}"
-    )
-
-# ---------------- RELAY ----------------
-@dp.message(lambda m: m.from_user.id in active_chats and not m.text.startswith("/"))
-async def relay(message: types.Message):
-    uid = message.from_user.id
+async def block(m: types.Message):
+    uid = m.from_user.id
     pid = active_chats.get(uid)
-    if pid:
-        await log_message(uid, pid, message.text)
-        await bot.send_message(pid, message.text)
+    if not pid:
+        return
+    async with db.acquire() as con:
+        await con.execute(
+            "INSERT INTO blocks(user_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
+            uid, pid
+        )
+    await stop(m)
 
 # ---------------- ADMIN ----------------
 @dp.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Not admin")
+async def admin(m: types.Message):
+    if m.from_user.id != ADMIN_ID:
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Broadcast", callback_data="bc")],
         [InlineKeyboardButton(text="🚫 Ban", callback_data="ban")],
-        [InlineKeyboardButton(text="✅ Unban", callback_data="unban")],
-        [InlineKeyboardButton(text="👑 Give VIP", callback_data="vip")]
+        [InlineKeyboardButton(text="👑 VIP", callback_data="vip")]
     ])
-    await message.answer("Admin Panel", reply_markup=kb)
+    await m.answer("Admin Panel", reply_markup=kb)
 
-@dp.callback_query(lambda c: c.data in ["bc","ban","unban","vip"])
+@dp.callback_query(lambda c: c.data in ["bc","ban","vip"])
 async def admin_cb(c: CallbackQuery):
     admin_state[ADMIN_ID] = c.data
     await c.message.answer("Send user id / message")
     await c.answer()
 
-@dp.message(lambda m: m.from_user.id == ADMIN_ID and ADMIN_ID in admin_state)
-async def admin_action(message: types.Message):
+@dp.message(lambda m: m.from_user.id==ADMIN_ID and ADMIN_ID in admin_state)
+async def admin_action(m: types.Message):
     act = admin_state.pop(ADMIN_ID)
-    if act == "ban":
-        await ban_user(int(message.text))
-        await message.answer("🚫 Banned")
-    elif act == "unban":
-        await unban_user(int(message.text))
-        await message.answer("✅ Unbanned")
-    elif act == "vip":
-        await update_user(int(message.text), "premium", True)
-        await update_user(int(message.text), "badge_type", "admin")
-        await message.answer("👑 VIP granted")
-    elif act == "bc":
-        async with db_pool.acquire() as con:
-            users = await con.fetch("SELECT user_id FROM users")
-            for u in users:
-                try:
-                    await message.copy_to(u["user_id"])
-                except: pass
+
+    if act=="ban":
+        await update(int(m.text),"banned",True)
+        await m.answer("🚫 Banned")
+
+    elif act=="vip":
+        await update(int(m.text),"premium",True)
+        await update(int(m.text),"badge","admin")
+        await m.answer("👑 VIP given")
+
+    elif act=="bc":
+        async with db.acquire() as con:
+            users = await con.fetch("SELECT user_id FROM users WHERE banned=FALSE")
+        for u in users:
+            try: await m.copy_to(u["user_id"])
+            except: pass
 
 # ---------------- RUN ----------------
 async def main():
     await init_db()
-    print("🚀 Minglo Bot Running (FULL)")
+    print("🚀 DB + REDIS BOT RUNNING")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
