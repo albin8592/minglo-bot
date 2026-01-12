@@ -39,7 +39,7 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS banned_users(
             user_id BIGINT PRIMARY KEY
         )""")
-        await con.execute("""
+               await con.execute("""
         CREATE TABLE IF NOT EXISTS messages(
             id SERIAL PRIMARY KEY,
             sender BIGINT,
@@ -47,13 +47,14 @@ async def init_db():
             text TEXT,
             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
-            await con.execute("""
+            await con.execute("""   # ❌ EXTRA INDENT HERE
         CREATE TABLE IF NOT EXISTS stars_log(
             id SERIAL PRIMARY KEY,
             user_id BIGINT,
             stars INT,
             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
+
 
 # ---------------- DB HELPERS ----------------
 async def add_user(uid):
@@ -119,11 +120,12 @@ def main_keyboard():
         [KeyboardButton(text="🔀 Random Chat (Free)")],
         [KeyboardButton(text="👧 Find Girls"), KeyboardButton(text="👦 Find Boys")],
         [KeyboardButton(text="📢 Invite & Earn Premium")],
-        [KeyboardButton(text="🎁 Send Stars as Gift")]
+        [KeyboardButton(text="🎁 Send Stars as Gift")],
         [KeyboardButton(text="💎 VIP Status")],
         [KeyboardButton(text="⏭ Next"), KeyboardButton(text="❌ Stop")],
         [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")],
     ])
+
 
 def gender_keyboard():
     return ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
@@ -697,6 +699,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
