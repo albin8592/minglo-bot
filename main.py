@@ -443,30 +443,63 @@ async def admin_cb(c: CallbackQuery):
 
     await c.answer()
 
+# state dict: user_id -> {"action": str, "step": int}
+admin_state = {}
+
+@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
+async def admin_cb(c: CallbackQuery):
+    admin_state[c.from_user.id] = {"action": c.data, "step": 1}
+
+    if c.data == "admin_broadcast":
+        await c.message.answer("📢 Send broadcast message:")
+    elif c.data in ["admin_ban", "admin_unban", "admin_vip"]:
+        await c.message.answer("Send the user ID:")
+    elif c.data == "admin_view_users":
+        async with db_pool.acquire() as con:
+            users = await con.fetch("SELECT user_id, name, premium, referrals FROM users")
+            if not users:
+                await c.message.answer("No users found")
+                return
+            text = "👥 Users:\n\n"
+            for u in users:
+                text += f"ID: {u['user_id']}, Name: {u['name'] or 'N/A'}, VIP: {'YES' if u['premium'] else 'NO'}, Referrals: {u['referrals']}\n"
+            await c.message.answer(text)
+
+    await c.answer()
+
+
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
-    act = admin_state.pop(message.from_user.id)
+    state = admin_state[message.from_user.id]
+    action = state["action"]
     text = message.text.strip()
 
-    if act == "admin_ban":
-        await ban_user(int(text))
-        await message.answer("🚫 User banned")
-    elif act == "admin_unban":
-        await unban_user(int(text))
-        await message.answer("✅ User unbanned")
-    elif act == "admin_vip":
-        await update_user(int(text), "premium", True)
-        await update_user(int(text), "badge_type", "admin")
-        await message.answer("👑 VIP granted")
-    elif act == "admin_broadcast":
-        async with db_pool.acquire() as con:
-            users = await con.fetch("SELECT user_id FROM users")
-            for u in users:
-                try:
-                    await message.copy_to(u["user_id"])
-                except:
-                    pass
-        await message.answer("📢 Broadcast sent")
+    try:
+        if action == "admin_ban":
+            uid = int(text)
+            await ban_user(uid)
+            await message.answer(f"🚫 User {uid} banned")
+        elif action == "admin_unban":
+            uid = int(text)
+            await unban_user(uid)
+            await message.answer(f"✅ User {uid} unbanned")
+        elif action == "admin_vip":
+            uid = int(text)
+            await update_user(uid, "premium", True)
+            await update_user(uid, "badge_type", "admin")
+            await message.answer(f"👑 VIP granted to {uid}")
+        elif action == "admin_broadcast":
+            async with db_pool.acquire() as con:
+                users = await con.fetch("SELECT user_id FROM users")
+            # send concurrently
+            tasks = [message.copy_to(u["user_id"]) for u in users]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await message.answer("📢 Broadcast sent")
+    except Exception as e:
+        await message.answer(f"❌ Error: {e}")
+
+    # സ്റ്റേറ്റ് നീക്കം ചെയ്യുക
+    admin_state.pop(message.from_user.id, None)
 
 
 # ---------------- RUN ----------------
@@ -477,6 +510,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
