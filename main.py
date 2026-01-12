@@ -601,7 +601,8 @@ async def admin_cb(c: CallbackQuery):
         f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
         "After payout, type 'confirm payout' to reset stars."
     )
-  await c.answer()
+    await c.answer()
+
 # ---------------- STARS CALLBACK → INVOICE ----------------
 @dp.callback_query(lambda c: c.data.startswith("stars_"))
 async def send_stars_invoice(callback: CallbackQuery, bot: Bot):
@@ -727,6 +728,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
