@@ -373,14 +373,43 @@ async def block_user(message: types.Message):
         await bot.send_message(pid, "🚫 You were blocked")
     await message.answer("🚫 User blocked")
 
+# ---------------- UNBLOCK ----------------
 @dp.message(lambda m: m.text == "✅ Unblock")
 async def unblock_user(message: types.Message):
     uid = message.from_user.id
     if uid not in blocked or not blocked[uid]:
-        await message.answer("❌ No blocked users")
+        await message.answer("❌ You have no blocked users")
         return
-    text = "Blocked users:\n" + "\n".join(map(str, blocked[uid]))
+
+    # Show blocked users with numbers
+    text = "Blocked users:\n" + "\n".join(
+        [f"{i+1}. {user_id}" for i, user_id in enumerate(blocked[uid])]
+    )
+    text += "\n\nSend the number of the user you want to unblock."
     await message.answer(text)
+
+    # Set state for unblocking
+    admin_state[uid] = {"action": "unblock_user_step1"}
+
+# Handle the number input to actually unblock
+@dp.message(lambda m: m.from_user.id in admin_state and admin_state[m.from_user.id]["action"] == "unblock_user_step1")
+async def unblock_user_step2(message: types.Message):
+    uid = message.from_user.id
+    if not message.text.isdigit():
+        await message.answer("❌ Send a valid number.")
+        return
+
+    index = int(message.text) - 1
+    if index < 0 or index >= len(blocked.get(uid, [])):
+        await message.answer("❌ Invalid number.")
+        return
+
+    unblocked_id = blocked[uid].pop(index)
+    await message.answer(f"✅ Unblocked user: {unblocked_id}")
+
+    # Clear state
+    admin_state.pop(uid, None)
+
 
 # ---------------- INVITE / VIP ----------------
 @dp.message(lambda m: m.text == "📢 Invite & Earn Premium")
@@ -537,6 +566,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
