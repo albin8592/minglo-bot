@@ -485,35 +485,42 @@ async def admin_action(message: types.Message):
             if action == "admin_ban":
                 await ban_user(uid)
                 await message.answer(f"🚫 User {uid} banned successfully.")
+
             elif action == "admin_unban":
                 await unban_user(uid)
                 await message.answer(f"✅ User {uid} unbanned successfully.")
+
             elif action == "admin_vip":
                 await update_user(uid, "premium", True)
                 await update_user(uid, "badge_type", "admin")
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-      elif action == "admin_broadcast":
-    async with db_pool.acquire() as con:
-        users = await con.fetch("SELECT user_id FROM users")
+        elif action == "admin_broadcast":
+            async with db_pool.acquire() as con:
+                users = await con.fetch("SELECT user_id FROM users")
 
-    success = 0
-    failed = 0
-    for u in users:
-        try:
-            await bot.send_message(u["user_id"], message.text)
-            success += 1
-            await asyncio.sleep(0.05)  # ✅ ADD THIS LINE
-        except Exception:
-            failed += 1
+            success = 0
+            failed = 0
 
-    await message.answer(f"📢 Broadcast complete.\n✅ Sent: {success}\n❌ Failed: {failed}")
+            for u in users:
+                try:
+                    await bot.send_message(u["user_id"], message.text)
+                    success += 1
+                    await asyncio.sleep(0.05)  # ✅ rate limit safe
+                except Exception:
+                    failed += 1
+
+            await message.answer(
+                f"📢 Broadcast complete.\n"
+                f"✅ Sent: {success}\n"
+                f"❌ Failed: {failed}"
+            )
 
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
-    # clear admin state after action
+    # clear admin state
     admin_state.pop(message.from_user.id, None)
 
 
@@ -526,6 +533,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
