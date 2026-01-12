@@ -489,19 +489,20 @@ async def admin_action(message: types.Message):
 
         # ---------------- BROADCAST ----------------
         elif action == "admin_broadcast":
-            async with db_pool.acquire() as con:
-                users = await con.fetch("SELECT user_id FROM users")
+    async with db_pool.acquire() as con:
+        users = await con.fetch("SELECT user_id FROM users")
 
-            success = 0
-            failed = 0
-            for u in users:
-                try:
-                    await message.copy_to(u["user_id"])
-                    success += 1
-                except Exception:
-                    failed += 1
+    success = 0
+    failed = 0
+    for u in users:
+        try:
+            await bot.send_message(u["user_id"], message.text)
+            success += 1
+        except Exception:
+            failed += 1
 
-            await message.answer(f"📢 Broadcast complete.\n✅ Sent: {success}\n❌ Failed: {failed}")
+    await message.answer(f"📢 Broadcast complete.\n✅ Sent: {success}\n❌ Failed: {failed}")
+
 
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
@@ -519,6 +520,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
