@@ -207,9 +207,10 @@ async def profile_flow(message: types.Message):
         return
 
     # 4️⃣ GENDER
-    if user["gender"] is None:
+# 4️⃣ GENDER
+if user["gender"] is None:
     if text not in ["👦 Boy", "👧 Girl"]:
-        return
+        return  # Python-ന് block വേണം
 
     await update_user(uid, "gender", text)
     waiting_random.add(uid)
@@ -224,6 +225,7 @@ async def profile_flow(message: types.Message):
         reply_markup=main_keyboard()
     )
     return
+
 
 
 # ---------------- MATCH ----------------
@@ -442,6 +444,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
