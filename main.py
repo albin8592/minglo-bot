@@ -129,8 +129,17 @@ async def check_banned(message):
         return True
     return False
 
-def mask(name):
-    return name[0] + "***" if name else "User"
+def mask(user):
+    """
+    user: dict from DB containing 'name' and 'premium'
+    Returns masked name with VIP badge if premium
+    """
+    name = user.get("name") or "User"
+    masked = name[0] + "***"
+    if user.get("premium"):
+        masked += " 👑"
+    return masked
+
 
 # ---------------- START + REFERRAL ----------------
 @dp.message(Command("start"))
@@ -263,9 +272,9 @@ async def try_match(uid, queue, want_gender, message):
 
         # notify both
         try:
-            await bot.send_message(uid, f"🎉 Match Found\n👤 {mask(other['name'])}", reply_markup=main_keyboard())
-            await bot.send_message(other_id, f"🎉 Match Found\n👤 {mask(me['name'])}", reply_markup=main_keyboard())
-        except Exception as e:
+            await bot.send_message(uid, f"🎉 Match Found\n👤 {mask(other)}", reply_markup=main_keyboard())
+            await bot.send_message(other_id, f"🎉 Match Found\n👤 {mask(me)}", reply_markup=main_keyboard())
+            except Exception as e:
             print(f"MATCH NOTIFY ERROR: {e}")
 
         return
@@ -493,6 +502,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
