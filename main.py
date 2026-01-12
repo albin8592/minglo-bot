@@ -166,36 +166,24 @@ async def start(message: types.Message):
 @dp.message(
     lambda m:
         not m.text.startswith("/") and
+        m.from_user.id not in active_chats and   # ✅ ADD THIS
         m.text not in [
             "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
             "📢 Invite & Earn Premium", "💎 VIP Status",
             "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
         ]
 )
-
 async def profile_flow(message: types.Message):
     if await check_banned(message):
         return
 
     uid = message.from_user.id
-
-    # 🟢 already chatting → ignore
-    if uid in active_chats:
-        return
-
     user = await get_user(uid)
     text = message.text.strip()
 
-    uid = message.from_user.id
-    user = await get_user(uid)
-    text = message.text.strip()
-
-    # 🟢 profile completed → allow chat
+    # 🛑 profile already completed → ignore
     if user["gender"] is not None:
-        if uid in active_chats:
-            return  # relay handler handle cheyyum
         return
-
 
     # 1️⃣ NAME
     if user["name"] is None:
@@ -224,9 +212,8 @@ async def profile_flow(message: types.Message):
             return
 
         await update_user(uid, "gender", text)
-        waiting_random.add(uid) 
-        
-        # 🔑 auto discoverable
+        waiting_random.add(uid)
+
         if text == "👧 Girl":
             waiting_find_girls.add(uid)
         else:
@@ -236,8 +223,7 @@ async def profile_flow(message: types.Message):
             "✅ Profile completed!\n💡 You are now discoverable",
             reply_markup=main_keyboard()
         )
-
-        return
+              return
 
 # ---------------- MATCH ----------------
 async def try_match(uid, queue, want_gender, message):
@@ -455,6 +441,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
