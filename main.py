@@ -11,6 +11,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 DATABASE_URL = os.getenv("DATABASE_URL")
+ADMIN_BANK = os.getenv("ADMIN_BANK", "Enter your UPI/Bank here")
 
 FREE_SKIP_LIMIT = 5
 PREMIUM_REFERRALS = 100
@@ -590,20 +591,17 @@ async def admin_cb(c: CallbackQuery):
         )
         await c.message.answer(text)
 
-    elif action == "admin_withdraw":
-        # Calculate total stars / earnings
-        async with db_pool.acquire() as con:
-            total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log")
-        total_stars = total_stars or 0
+   elif action == "admin_withdraw":
+    async with db_pool.acquire() as con:
+        total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log")
+    total_stars = total_stars or 0
 
-        # Show admin the total and instructions
-        await c.message.answer(
-            f"💵 Total Stars collected: {total_stars}\n\n"
-            "Use your bank / UPI to transfer equivalent amount to your account.\n"
-            "After payout, type 'confirm payout' to reset stars."
-        )
-
-    await c.answer()
+    await c.message.answer(
+        f"💵 Total Stars collected: {total_stars}\n\n"
+        f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
+        "After payout, type 'confirm payout' to reset stars."
+    )
+  await c.answer()
 # ---------------- STARS CALLBACK → INVOICE ----------------
 @dp.callback_query(lambda c: c.data.startswith("stars_"))
 async def send_stars_invoice(callback: CallbackQuery, bot: Bot):
@@ -729,6 +727,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
