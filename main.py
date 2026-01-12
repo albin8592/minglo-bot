@@ -406,46 +406,59 @@ async def relay_all(message: types.Message):
 
 
 # ---------------- ADMIN ----------------
+# ---------------- ADMIN ----------------
 @dp.message(Command("admin"))
 async def admin_panel(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("❌ Not admin")
         return
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Broadcast", callback_data="bc")],
-        [InlineKeyboardButton(text="🚫 Ban", callback_data="ban")],
-        [InlineKeyboardButton(text="✅ Unban", callback_data="unban")],
-        [InlineKeyboardButton(text="👑 Give VIP", callback_data="vip")]
+        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
+        [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
+        [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
+        [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")]
     ])
     await message.answer("Admin Panel", reply_markup=kb)
 
-@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data in ["bc","ban","unban","vip"])
+@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
 async def admin_cb(c: CallbackQuery):
     admin_state[c.from_user.id] = c.data
 
-    if c.data == "bc":
-        await c.message.answer("📢 Send broadcast message")
-    else:
-        await c.message.answer("Send user ID")
+    if c.data == "admin_broadcast":
+        await c.message.answer("📢 Send broadcast message:")
+    elif c.data in ["admin_ban", "admin_unban", "admin_vip"]:
+        await c.message.answer("Send the user ID:")
+    elif c.data == "admin_view_users":
+        async with db_pool.acquire() as con:
+            users = await con.fetch("SELECT user_id, name, premium, referrals FROM users")
+            if not users:
+                await c.message.answer("No users found")
+                return
+            text = "👥 Users:\n\n"
+            for u in users:
+                text += f"ID: {u['user_id']}, Name: {u['name'] or 'N/A'}, VIP: {'YES' if u['premium'] else 'NO'}, Referrals: {u['referrals']}\n"
+            await c.message.answer(text)
 
     await c.answer()
-
 
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
     act = admin_state.pop(message.from_user.id)
+    text = message.text.strip()
 
-    if act == "ban":
-        await ban_user(int(message.text))
-        await message.answer("🚫 Banned")
-    elif act == "unban":
-        await unban_user(int(message.text))
-        await message.answer("✅ Unbanned")
-    elif act == "vip":
-        await update_user(int(message.text), "premium", True)
-        await update_user(int(message.text), "badge_type", "admin")
+    if act == "admin_ban":
+        await ban_user(int(text))
+        await message.answer("🚫 User banned")
+    elif act == "admin_unban":
+        await unban_user(int(text))
+        await message.answer("✅ User unbanned")
+    elif act == "admin_vip":
+        await update_user(int(text), "premium", True)
+        await update_user(int(text), "badge_type", "admin")
         await message.answer("👑 VIP granted")
-    elif act == "bc":
+    elif act == "admin_broadcast":
         async with db_pool.acquire() as con:
             users = await con.fetch("SELECT user_id FROM users")
             for u in users:
@@ -455,6 +468,7 @@ async def admin_action(message: types.Message):
                     pass
         await message.answer("📢 Broadcast sent")
 
+
 # ---------------- RUN ----------------
 async def main():
     await init_db()
@@ -463,6 +477,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
