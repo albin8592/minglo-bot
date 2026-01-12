@@ -667,7 +667,7 @@ async def admin_action(message: types.Message):
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-        elif action == "admin_broadcast":
+       elif action == "admin_broadcast":
     async with db_pool.acquire() as con:
         users = await con.fetch("SELECT user_id FROM users")
 
@@ -694,7 +694,7 @@ async def admin_action(message: types.Message):
                     chat_id=u["user_id"],
                     photo=file_id,
                     caption=caption,
-                    parse_mode="HTML"  # <-- important for links
+                    parse_mode="HTML"
                 )
             elif media_type == "video":
                 await bot.send_video(
@@ -707,7 +707,7 @@ async def admin_action(message: types.Message):
                 await bot.send_message(
                     chat_id=u["user_id"],
                     text=text,
-                    parse_mode="HTML"  # links in text
+                    parse_mode="HTML"
                 )
             success += 1
             await asyncio.sleep(0.05)
@@ -716,6 +716,7 @@ async def admin_action(message: types.Message):
             print(f"Broadcast failed for {u['user_id']}: {e}")
 
     await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
+
    except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
@@ -753,6 +754,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
