@@ -424,10 +424,32 @@ async def invite(message: types.Message):
 @dp.message(lambda m: m.text == "💎 VIP Status")
 async def vip_status(message: types.Message):
     user = await get_user(message.from_user.id)
+    
+    if not user['premium']:
+        await message.answer(
+            f"💎 VIP: NO\n"
+            f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n"
+            "Upgrade to VIP to unlock special features!"
+        )
+        return
+
+    # VIP features list
+    vip_features = [
+        "🔹 Access to 'Find Girls' / 'Find Boys' chats",
+        "🔹 Unlimited ⏭ Next skips",
+        "🔹 VIP badge 👑 next to your name",
+        "🔹 Discoverable in premium-only searches",
+        "🔹 Any future VIP perks"
+    ]
+
+    features_text = "\n".join(vip_features)
+
     await message.answer(
-        f"💎 VIP: {'YES' if user['premium'] else 'NO'}\n"
-        f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}"
+        f"💎 VIP: YES\n"
+        f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n"
+        f"🎁 VIP Features:\n{features_text}"
     )
+
 
 # ---------------- RELAY ----------------
 @dp.message(lambda m: m.from_user.id in active_chats)
@@ -566,6 +588,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
