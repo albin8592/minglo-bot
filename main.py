@@ -235,7 +235,6 @@ async def try_match(uid, queue, want_gender, message):
     me = await get_user(uid)
     msg = await message.answer("🔎 Searching...")
 
-
     for other_id in list(queue):
         if other_id == uid:
             continue
@@ -256,25 +255,40 @@ async def try_match(uid, queue, want_gender, message):
         if want_gender and other["gender"] != want_gender:
             continue
 
-        # ✅ MATCH
+        # ✅ MATCH FOUND
         queue.discard(other_id)
         active_chats[uid] = other_id
         active_chats[other_id] = uid
 
-        await msg.delete()
-        await message.answer(
-            f"🎉 Match Found\n👤 {mask(other['name'])}",
-            reply_markup=main_keyboard()
-        )
-        await bot.send_message(
-            other_id,
-            f"🎉 Match Found\n👤 {mask(me['name'])}",
-            reply_markup=main_keyboard()
-        )
+        try:
+            await msg.delete()
+        except: pass
+
+        # notify both safely
+        try:
+            await message.answer(
+                f"🎉 Match Found\n👤 {mask(other['name'])}",
+                reply_markup=main_keyboard()
+            )
+        except Exception as e:
+            print(f"Error sending match to {uid}: {e}")
+
+        try:
+            await bot.send_message(
+                other_id,
+                f"🎉 Match Found\n👤 {mask(me['name'])}",
+                reply_markup=main_keyboard()
+            )
+        except Exception as e:
+            print(f"Error sending match to {other_id}: {e}")
+
         return
 
     queue.add(uid)
-    await msg.edit_text("⏳ Waiting for partner...")
+    try:
+        await msg.edit_text("⏳ Waiting for partner...")
+    except: pass
+
 
 # ---------------- CHAT BUTTONS ----------------
 @dp.message(lambda m: m.text in ["🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys"])
@@ -392,9 +406,21 @@ async def vip_status(message: types.Message):
 async def relay(message: types.Message):
     uid = message.from_user.id
     pid = active_chats.get(uid)
-    if pid:
-        await log_message(uid, pid, message.text)
+
+    if not pid:
+        await message.answer("❌ No active partner")
+        return
+
+    # log message
+    await log_message(uid, pid, message.text)
+
+    # send to partner safely
+    try:
         await bot.send_message(pid, message.text)
+    except Exception as e:
+        await message.answer("❌ Failed to send message to partner.")
+        print(f"Relay error: {e}")
+
 
 # ---------------- ADMIN ----------------
 @dp.message(Command("admin"))
@@ -445,6 +471,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
