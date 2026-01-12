@@ -114,7 +114,9 @@ def main_keyboard():
         [KeyboardButton(text="📢 Invite & Earn Premium")],
         [KeyboardButton(text="💎 VIP Status")],
         [KeyboardButton(text="⏭ Next"), KeyboardButton(text="❌ Stop")],
-        [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")]
+        [KeyboardButton(text="🚫 Block & Report"), KeyboardButton(text="✅ Unblock")],
+        [KeyboardButton(text="/start"), KeyboardButton(text="/support")],
+        [KeyboardButton(text="/premium"), KeyboardButton(text="/about")]
     ])
 
 def gender_keyboard():
@@ -450,6 +452,47 @@ async def vip_status(message: types.Message):
         f"🎁 VIP Features:\n{features_text}"
     )
 
+# ---------------- SUPPORT ----------------
+@dp.message(Command("support"))
+async def support(message: types.Message):
+    if await check_banned(message): return
+    await message.answer(
+        "📞 Need help? Contact our support:\n"
+        "Telegram: @YourSupportUsername\n"
+        "Or reply here with your query."
+    )
+
+
+# ---------------- PREMIUM INFO ----------------
+@dp.message(Command("premium"))
+async def premium_info(message: types.Message):
+    if await check_banned(message): return
+    user = await get_user(message.from_user.id)
+    
+    if user["premium"]:
+        await message.answer("💎 You are already a VIP!\nEnjoy premium features 🎉")
+    else:
+        link = f"https://t.me/{(await bot.get_me()).username}?start={message.from_user.id}"
+        await message.answer(
+            f"💎 Become VIP by inviting friends!\n"
+            f"Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n"
+            f"Invite link: {link}"
+        )
+
+
+# ---------------- ABOUT ----------------
+@dp.message(Command("about"))
+async def about(message: types.Message):
+    if await check_banned(message): return
+    await message.answer(
+        "💜 Minglo Chat Bot\n\n"
+        "🔹 Random Chat with strangers\n"
+        "🔹 VIP features for premium users\n"
+        "🔹 Block & Report functionality\n"
+        "🔹 Find Boys / Girls for VIP users\n\n"
+        "Enjoy safe & fun chatting! 💬"
+    )
+
 
 # ---------------- RELAY ----------------
 @dp.message(lambda m: m.from_user.id in active_chats)
@@ -588,6 +631,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
