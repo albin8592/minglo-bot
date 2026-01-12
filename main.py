@@ -175,8 +175,9 @@ async def start(message: types.Message):
 @dp.message(
     lambda m:
         m.text and
-        not m.text.startswith("/") and   # 🔥 ADD THIS LINE
+        not m.text.startswith("/") and
         m.from_user.id not in active_chats and
+        m.from_user.id not in admin_state and   # 🔥 VERY IMPORTANT
         m.text not in [
             "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
             "📢 Invite & Earn Premium", "💎 VIP Status",
@@ -524,6 +525,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
