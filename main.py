@@ -434,7 +434,8 @@ async def admin_cb(c: CallbackQuery):
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
     act = admin_state.pop(message.from_user.id)
-        if act == "ban":
+
+    if act == "ban":
         await ban_user(int(message.text))
         await message.answer("🚫 Banned")
     elif act == "unban":
@@ -450,7 +451,9 @@ async def admin_action(message: types.Message):
             for u in users:
                 try:
                     await message.copy_to(u["user_id"])
-                except: pass
+                except:
+                    pass
+        await message.answer("📢 Broadcast sent")
 
 # ---------------- RUN ----------------
 async def main():
@@ -460,6 +463,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
