@@ -198,10 +198,11 @@ async def stars_menu(message: types.Message):
     ])
 
     await message.answer(
-        "🎁 Support Minglo Bot\n\n"
-        "Stars help us run & improve the bot 💜",
-        reply_markup=kb
-    
+    "🎁 Support Minglo Bot\n\n"
+    "Stars help us run & improve the bot 💜",
+    reply_markup=kb
+)
+
 # ---------------- PROFILE FLOW (SAFE) ----------------
 @dp.message(
     lambda m:
@@ -708,6 +709,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
