@@ -667,7 +667,8 @@ async def admin_action(message: types.Message):
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-       elif action == "admin_broadcast":
+     # ---------------- BROADCAST ----------------
+elif action == "admin_broadcast":
     async with db_pool.acquire() as con:
         users = await con.fetch("SELECT user_id FROM users")
 
@@ -754,6 +755,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
