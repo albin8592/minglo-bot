@@ -668,32 +668,55 @@ async def admin_action(message: types.Message):
 
         # ---------------- BROADCAST ----------------
         elif action == "admin_broadcast":
-            async with db_pool.acquire() as con:
-                users = await con.fetch("SELECT user_id FROM users")
+    async with db_pool.acquire() as con:
+        users = await con.fetch("SELECT user_id FROM users")
 
-            success = 0
-            failed = 0
+    success = 0
+    failed = 0
 
-            for u in users:
-                try:
-                    # TEXT
-                    if message.text:
-                        await bot.send_message(u["user_id"], message.text)
-                    # PHOTO
-                    elif message.photo:
-                        await bot.send_photo(u["user_id"], message.photo[-1].file_id, caption=message.caption or "")
-                    # VIDEO
-                    elif message.video:
-                        await bot.send_video(u["user_id"], message.video.file_id, caption=message.caption or "")
-                    success += 1
-                    await asyncio.sleep(0.05)
-                except Exception as e:
-                    failed += 1
-                    print("Broadcast failed:", e)
+    # Determine what kind of message was sent
+    if message.photo:
+        media_type = "photo"
+        file_id = message.photo[-1].file_id
+        caption = message.caption or ""
+    elif message.video:
+        media_type = "video"
+        file_id = message.video.file_id
+        caption = message.caption or ""
+    else:
+        media_type = "text"
+        text = message.text
 
-            await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
+    for u in users:
+        try:
+            if media_type == "photo":
+                await bot.send_photo(
+                    chat_id=u["user_id"],
+                    photo=file_id,
+                    caption=caption,
+                    parse_mode="HTML"  # <-- important for links
+                )
+            elif media_type == "video":
+                await bot.send_video(
+                    chat_id=u["user_id"],
+                    video=file_id,
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+            elif media_type == "text":
+                await bot.send_message(
+                    chat_id=u["user_id"],
+                    text=text,
+                    parse_mode="HTML"  # links in text
+                )
+            success += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            failed += 1
+            print(f"Broadcast failed for {u['user_id']}: {e}")
 
-    except Exception as e:
+    await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
+   except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
     # clear admin state
@@ -730,6 +753,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
