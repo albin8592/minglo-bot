@@ -482,7 +482,6 @@ async def vip_status(message: types.Message):
         f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n"
         f"🎁 VIP Features:\n{features_text}"
     )
-)
 
 # ---------------- SUPPORT ----------------
 @dp.message(Command("support"))
@@ -709,6 +708,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
