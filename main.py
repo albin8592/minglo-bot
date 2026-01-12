@@ -639,6 +639,7 @@ async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
 
 
 # admin action handler
+# ---------------- ADMIN ACTION HANDLER (FIXED) ----------------
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
     state = admin_state[message.from_user.id]
@@ -667,74 +668,79 @@ async def admin_action(message: types.Message):
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-        # ---------------- BROADCAST ----------------
-elif action == "admin_broadcast":
-    async with db_pool.acquire() as con:
-        users = await con.fetch("SELECT user_id FROM users")
+        elif action == "admin_broadcast":
+            async with db_pool.acquire() as con:
+                users = await con.fetch("SELECT user_id FROM users")
 
-    success = 0
-    failed = 0
+            if not users:
+                await message.answer("❌ No users to broadcast to.")
+                return
 
-    # Determine message type safely
-    media_type = "text"
-    text_to_send = message.text
-    file_id = None
-    caption = None
+            success = 0
+            failed = 0
 
-    if message.photo:
-        media_type = "photo"
-        file_id = message.photo[-1].file_id
-        caption = message.caption or ""
-    elif message.video:
-        media_type = "video"
-        file_id = message.video.file_id
-        caption = message.caption or ""
-    elif message.text:
-        media_type = "text"
-        text_to_send = message.text
-    else:
-        await message.answer("❌ Unsupported message type for broadcast.")
-        return
+            # Detect message type
+            media_type = "text"
+            text_to_send = message.text
+            file_id = None
+            caption = None
 
-    # Send to all users
-    for u in users:
-        try:
-            if media_type == "photo":
-                await bot.send_photo(
-                    chat_id=u["user_id"],
-                    photo=file_id,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-            elif media_type == "video":
-                await bot.send_video(
-                    chat_id=u["user_id"],
-                    video=file_id,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-            else:  # text
-                await bot.send_message(
-                    chat_id=u["user_id"],
-                    text=text_to_send,
-                    parse_mode="HTML"
-                )
-            success += 1
-            await asyncio.sleep(0.05)  # avoid flood limit
-        except Exception as e:
-            failed += 1
-            print(f"Broadcast failed for {u['user_id']}: {e}")
+            if message.photo:
+                media_type = "photo"
+                file_id = message.photo[-1].file_id
+                caption = message.caption or ""
+            elif message.video:
+                media_type = "video"
+                file_id = message.video.file_id
+                caption = message.caption or ""
+            elif message.text:
+                media_type = "text"
+                text_to_send = message.text
+            else:
+                await message.answer("❌ Unsupported message type for broadcast.")
+                return
 
-    await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
+            # Send broadcast
+            for u in users:
+                try:
+                    if media_type == "photo":
+                        await bot.send_photo(
+                            chat_id=u["user_id"],
+                            photo=file_id,
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                    elif media_type == "video":
+                        await bot.send_video(
+                            chat_id=u["user_id"],
+                            video=file_id,
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                    else:
+                        await bot.send_message(
+                            chat_id=u["user_id"],
+                            text=text_to_send,
+                            parse_mode="HTML"
+                        )
+                    success += 1
+                    await asyncio.sleep(0.05)  # avoid flood
+                except Exception as e:
+                    failed += 1
+                    print(f"Broadcast failed for {u['user_id']}: {e}")
 
+            await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
 
-         
+        else:
+            await message.answer("❌ Unknown admin action.")
 
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
-    # clear admin state
-    admin_state.pop(message.from_user.id, None)
+    finally:
+        # Clear admin state no matter what
+        admin_state.pop(message.from_user.id, None)
+
 
 
 # ---------------- STARS PAYMENT SUCCESS ----------------
@@ -768,6 +774,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
