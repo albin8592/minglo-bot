@@ -475,28 +475,28 @@ async def admin_action(message: types.Message):
     text = message.text.strip()
 
     try:
-        # ---------------- BAN / UNBAN / VIP ----------------
-        if action in ["admin_ban", "admin_unban", "admin_vip"]:
-            if not text.isdigit():
-                await message.answer("❌ Invalid user ID")
-                return
-            uid = int(text)
+       # ---------------- BAN / UNBAN / VIP ----------------
+if action in ["admin_ban", "admin_unban", "admin_vip"]:
+    if not text.isdigit():
+        await message.answer("❌ Invalid user ID")
+        return
+    uid = int(text)
 
-            if action == "admin_ban":
-                await ban_user(uid)
-                await message.answer(f"🚫 User {uid} banned successfully.")
+    if action == "admin_ban":
+        await ban_user(uid)
+        await message.answer(f"🚫 User {uid} banned successfully.")
 
-            elif action == "admin_unban":
-                await unban_user(uid)
-                await message.answer(f"✅ User {uid} unbanned successfully.")
+    elif action == "admin_unban":
+        await unban_user(uid)
+        await message.answer(f"✅ User {uid} unbanned successfully.")
 
-            elif action == "admin_vip":
-                await update_user(uid, "premium", True)
-                await update_user(uid, "badge_type", "admin")
-                await message.answer(f"👑 VIP granted to user {uid}.")
+    elif action == "admin_vip":
+        await update_user(uid, "premium", True)
+        await update_user(uid, "badge_type", "admin")
+        await message.answer(f"👑 VIP granted to user {uid}.")
 
-        # ---------------- BROADCAST ----------------
-      elif action == "admin_broadcast":
+# ---------------- BROADCAST ----------------
+elif action == "admin_broadcast":
     async with db_pool.acquire() as con:
         users = await con.fetch("SELECT user_id FROM users")
 
@@ -517,8 +517,6 @@ async def admin_action(message: types.Message):
         f"✅ Sent: {success}\n"
         f"❌ Failed: {failed}"
     )
-
-
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
 
@@ -535,6 +533,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
