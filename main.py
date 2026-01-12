@@ -219,11 +219,12 @@ async def profile_flow(message: types.Message):
         else:
             waiting_find_boys.add(uid)
 
-        await message.answer(
+               await message.answer(
             "✅ Profile completed!\n💡 You are now discoverable",
             reply_markup=main_keyboard()
         )
-              return
+        return
+
 
 # ---------------- MATCH ----------------
 async def try_match(uid, queue, want_gender, message):
@@ -441,6 +442,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
