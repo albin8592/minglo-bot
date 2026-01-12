@@ -418,10 +418,13 @@ async def relay_all(message: types.Message):
         print("RELAY ERROR:", e)
 
 
-# ---------------- ADMIN STATE ----------------
+# ---------------- ADMIN PANEL ----------------
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+# memory dict for admin state
 admin_state = {}  # user_id -> {"action": str}
 
-# ---------------- ADMIN PANEL COMMAND ----------------
+# /admin command
 @dp.message(Command("admin"))
 async def admin_panel(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -437,7 +440,8 @@ async def admin_panel(message: types.Message):
     ])
     await message.answer("Admin Panel", reply_markup=kb)
 
-# ---------------- CALLBACK HANDLER ----------------
+
+# callback for buttons
 @dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
 async def admin_cb(c: CallbackQuery):
     action = c.data
@@ -461,7 +465,8 @@ async def admin_cb(c: CallbackQuery):
 
     await c.answer()
 
-# ---------------- ADMIN ACTION HANDLER ----------------
+
+# admin action handler
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
     state = admin_state[message.from_user.id]
@@ -511,7 +516,6 @@ async def admin_action(message: types.Message):
 
 
 
-
 # ---------------- RUN ----------------
 async def main():
     await init_db()
@@ -520,6 +524,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
