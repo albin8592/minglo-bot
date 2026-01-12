@@ -562,6 +562,7 @@ async def admin_panel(message: types.Message):
         [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
         [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
         [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
+        [InlineKeyboardButton(text="💵 Withdraw / Payout", callback_data="admin_withdraw")],
         [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")]
     ])
     await message.answer("Admin Panel", reply_markup=kb)
@@ -589,6 +590,19 @@ async def admin_cb(c: CallbackQuery):
         )
         await c.message.answer(text)
 
+    elif action == "admin_withdraw":
+        # Calculate total stars / earnings
+        async with db_pool.acquire() as con:
+            total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log")
+        total_stars = total_stars or 0
+
+        # Show admin the total and instructions
+        await c.message.answer(
+            f"💵 Total Stars collected: {total_stars}\n\n"
+            "Use your bank / UPI to transfer equivalent amount to your account.\n"
+            "After payout, type 'confirm payout' to reset stars."
+        )
+
     await c.answer()
 # ---------------- STARS CALLBACK → INVOICE ----------------
 @dp.callback_query(lambda c: c.data.startswith("stars_"))
@@ -610,6 +624,13 @@ async def send_stars_invoice(callback: CallbackQuery, bot: Bot):
     )
 
     await callback.answer()
+# ---------------- ADMIN CONFIRM PAYOUT ----------------
+@dp.message(lambda m: m.from_user.id == ADMIN_ID and m.text.lower() == "confirm payout")
+async def confirm_payout(message: types.Message):
+    # Reset stars log after payout
+    async with db_pool.acquire() as con:
+        await con.execute("DELETE FROM stars_log")
+    await message.answer("✅ Payout confirmed. All star credits reset to 0.")
 # ---------------- PRE-CHECKOUT (STARS) ----------------
 @dp.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
@@ -708,6 +729,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
