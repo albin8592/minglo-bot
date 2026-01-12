@@ -260,27 +260,15 @@ async def try_match(uid, queue, want_gender, message):
         active_chats[uid] = other_id
         active_chats[other_id] = uid
 
-        try:
-            await msg.delete()
+        try: await msg.delete()
         except: pass
 
-        # notify both safely
+        # notify both
         try:
-            await message.answer(
-                f"🎉 Match Found\n👤 {mask(other['name'])}",
-                reply_markup=main_keyboard()
-            )
+            await bot.send_message(uid, f"🎉 Match Found\n👤 {mask(other['name'])}", reply_markup=main_keyboard())
+            await bot.send_message(other_id, f"🎉 Match Found\n👤 {mask(me['name'])}", reply_markup=main_keyboard())
         except Exception as e:
-            print(f"Error sending match to {uid}: {e}")
-
-        try:
-            await bot.send_message(
-                other_id,
-                f"🎉 Match Found\n👤 {mask(me['name'])}",
-                reply_markup=main_keyboard()
-            )
-        except Exception as e:
-            print(f"Error sending match to {other_id}: {e}")
+            print(f"MATCH NOTIFY ERROR: {e}")
 
         return
 
@@ -288,7 +276,6 @@ async def try_match(uid, queue, want_gender, message):
     try:
         await msg.edit_text("⏳ Waiting for partner...")
     except: pass
-
 
 # ---------------- CHAT BUTTONS ----------------
 @dp.message(lambda m: m.text in ["🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys"])
@@ -411,6 +398,11 @@ async def relay(message: types.Message):
         await message.answer("❌ No active partner")
         return
 
+    # block check before sending
+    if uid in blocked.get(pid, []) or pid in blocked.get(uid, []):
+        await message.answer("❌ Partner blocked you, cannot send message")
+        return
+
     # log message
     await log_message(uid, pid, message.text)
 
@@ -419,7 +411,7 @@ async def relay(message: types.Message):
         await bot.send_message(pid, message.text)
     except Exception as e:
         await message.answer("❌ Failed to send message to partner.")
-        print(f"Relay error: {e}")
+        print(f"RELAY ERROR: {e}")
 
 
 # ---------------- ADMIN ----------------
@@ -471,6 +463,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
