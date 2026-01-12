@@ -165,17 +165,15 @@ async def start(message: types.Message):
 # ---------------- PROFILE FLOW (SAFE) ----------------
 @dp.message(
     lambda m:
+        m.text and
         not m.text.startswith("/") and
         m.from_user.id not in active_chats and
-        (
-            (m.text not in [
-                "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
-                "📢 Invite & Earn Premium", "💎 VIP Status",
-                "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
-            ])
-        )
+        m.text not in [
+            "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
+            "📢 Invite & Earn Premium", "💎 VIP Status",
+            "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
+        ]
 )
-
 async def profile_flow(message: types.Message):
     if await check_banned(message):
         return
@@ -388,29 +386,25 @@ async def vip_status(message: types.Message):
     )
 
 # ---------------- RELAY ----------------
-@dp.message(lambda m: m.from_user.id in active_chats and not m.text.startswith("/"))
+@dp.message(lambda m: m.from_user.id in active_chats and m.text)
 async def relay(message: types.Message):
     uid = message.from_user.id
     pid = active_chats.get(uid)
 
     if not pid:
-        await message.answer("❌ No active partner")
         return
 
-    # block check before sending
+    # block check
     if uid in blocked.get(pid, []) or pid in blocked.get(uid, []):
-        await message.answer("❌ Partner blocked you, cannot send message")
+        await message.answer("❌ Partner blocked you")
         return
 
-    # log message
     await log_message(uid, pid, message.text)
 
-    # send to partner safely
     try:
         await bot.send_message(pid, message.text)
     except Exception as e:
-        await message.answer("❌ Failed to send message to partner.")
-        print(f"RELAY ERROR: {e}")
+        print("RELAY ERROR:", e)
 
 
 # ---------------- ADMIN ----------------
@@ -462,6 +456,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
