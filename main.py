@@ -590,17 +590,18 @@ async def admin_cb(c: CallbackQuery):
             for u in users
         )
         await c.message.answer(text)
-        elif action == "admin_withdraw":
-    async with db_pool.acquire() as con:
-        total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log")
-    total_stars = total_stars or 0
 
-    await c.message.answer(
-        f"💵 Total Stars collected: {total_stars}\n\n"
-        f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
-        "After payout, type 'confirm payout' to reset stars."
-    )
-    await c.answer()
+    elif action == "admin_withdraw":
+        async with db_pool.acquire() as con:
+            total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log")
+        total_stars = total_stars or 0
+
+        await c.message.answer(
+            f"💵 Total Stars collected: {total_stars}\n\n"
+            f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
+            "After payout, type 'confirm payout' to reset stars."
+        )
+        await c.answer()
 
 
 
@@ -729,6 +730,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
