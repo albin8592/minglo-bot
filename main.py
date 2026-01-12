@@ -496,26 +496,28 @@ async def admin_action(message: types.Message):
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
         # ---------------- BROADCAST ----------------
-        elif action == "admin_broadcast":
-            async with db_pool.acquire() as con:
-                users = await con.fetch("SELECT user_id FROM users")
+      elif action == "admin_broadcast":
+    async with db_pool.acquire() as con:
+        users = await con.fetch("SELECT user_id FROM users")
 
-            success = 0
-            failed = 0
+    success = 0
+    failed = 0
 
-            for u in users:
-                try:
-                    await bot.send_message(u["user_id"], message.text)
-                    success += 1
-                    await asyncio.sleep(0.05)  # ✅ rate limit safe
-                except Exception:
-                    failed += 1
+    for u in users:
+        try:
+            await message.copy_to(u["user_id"])
+            success += 1
+            await asyncio.sleep(0.05)  # rate limit safe
+        except Exception as e:
+            failed += 1
+            print("Broadcast failed:", e)
 
-            await message.answer(
-                f"📢 Broadcast complete.\n"
-                f"✅ Sent: {success}\n"
-                f"❌ Failed: {failed}"
-            )
+    await message.answer(
+        f"📢 Broadcast completed\n"
+        f"✅ Sent: {success}\n"
+        f"❌ Failed: {failed}"
+    )
+
 
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
@@ -533,6 +535,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
