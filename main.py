@@ -23,6 +23,7 @@ db_pool = None
 async def init_db():
     global db_pool
     db_pool = await asyncpg.create_pool(DATABASE_URL)
+
     async with db_pool.acquire() as con:
         await con.execute("""
         CREATE TABLE IF NOT EXISTS users(
@@ -34,27 +35,33 @@ async def init_db():
             premium BOOLEAN DEFAULT FALSE,
             referrals INT DEFAULT 0,
             badge_type TEXT
-        )""")
+        )
+        """)
+
         await con.execute("""
         CREATE TABLE IF NOT EXISTS banned_users(
             user_id BIGINT PRIMARY KEY
-        )""")
-               await con.execute("""
+        )
+        """)
+
+        await con.execute("""
         CREATE TABLE IF NOT EXISTS messages(
             id SERIAL PRIMARY KEY,
             sender BIGINT,
             receiver BIGINT,
             text TEXT,
             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-            await con.execute("""   # ❌ EXTRA INDENT HERE
+        )
+        """)
+
+        await con.execute("""
         CREATE TABLE IF NOT EXISTS stars_log(
             id SERIAL PRIMARY KEY,
             user_id BIGINT,
             stars INT,
             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-
+        )
+        """)
 
 # ---------------- DB HELPERS ----------------
 async def add_user(uid):
@@ -699,6 +706,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
