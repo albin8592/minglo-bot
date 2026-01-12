@@ -164,14 +164,18 @@ async def start(message: types.Message):
 
 # ---------------- PROFILE FLOW (SAFE) ----------------
 @dp.message(
-    lambda m: not m.text.startswith("/") and m.text not in [
-        "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
-        "📢 Invite & Earn Premium", "💎 VIP Status",
-        "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
-    ]
+    lambda m:
+        not m.text.startswith("/") and
+        m.from_user.id not in active_chats and
+        m.text not in [
+            "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
+            "📢 Invite & Earn Premium", "💎 VIP Status",
+            "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
+        ]
 )
 async def profile_flow(message: types.Message):
-    if await check_banned(message):
+
+  if await check_banned(message):
         return
 
     uid = message.from_user.id
@@ -440,3 +444,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
