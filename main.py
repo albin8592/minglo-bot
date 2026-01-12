@@ -177,17 +177,15 @@ async def profile_flow(message: types.Message):
     if await check_banned(message):
         return
 
-
     uid = message.from_user.id
     user = await get_user(uid)
     text = message.text.strip()
 
-    # 🛑 profile completed → ignore normal messages
-  # 🟢 profile completed → allow chat
-if user["gender"] is not None:
-    if uid in active_chats:
-        return  # relay handler handle cheyyum
-    return
+    # 🟢 profile completed → allow chat
+    if user["gender"] is not None:
+        if uid in active_chats:
+            return  # relay handler handle cheyyum
+        return
 
 
     # 1️⃣ NAME
@@ -448,5 +446,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
