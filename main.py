@@ -208,22 +208,22 @@ async def profile_flow(message: types.Message):
 
     # 4️⃣ GENDER
     if user["gender"] is None:
-        if text not in ["👦 Boy", "👧 Girl"]:
-            return
-
-        await update_user(uid, "gender", text)
-        waiting_random.add(uid)
-
-        if text == "👧 Girl":
-            waiting_find_girls.add(uid)
-        else:
-            waiting_find_boys.add(uid)
-
-               await message.answer(
-            "✅ Profile completed!\n💡 You are now discoverable",
-            reply_markup=main_keyboard()
-        )
+    if text not in ["👦 Boy", "👧 Girl"]:
         return
+
+    await update_user(uid, "gender", text)
+    waiting_random.add(uid)
+
+    if text == "👧 Girl":
+        waiting_find_girls.add(uid)
+    else:
+        waiting_find_boys.add(uid)
+
+    await message.answer(
+        "✅ Profile completed!\n💡 You are now discoverable",
+        reply_markup=main_keyboard()
+    )
+    return
 
 
 # ---------------- MATCH ----------------
@@ -442,6 +442,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
