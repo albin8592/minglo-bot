@@ -625,13 +625,7 @@ async def send_stars_invoice(callback: CallbackQuery, bot: Bot):
     )
 
     await callback.answer()
-# ---------------- ADMIN CONFIRM PAYOUT ----------------
-@dp.message(lambda m: m.from_user.id == ADMIN_ID and m.text.lower() == "confirm payout")
-async def confirm_payout(message: types.Message):
-    # Reset stars log after payout
-    async with db_pool.acquire() as con:
-        await con.execute("DELETE FROM stars_log")
-    await message.answer("✅ Payout confirmed. All star credits reset to 0.")
+
 # ---------------- PRE-CHECKOUT (STARS) ----------------
 @dp.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
@@ -639,14 +633,68 @@ async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
 
 
 # admin action handler
-# ---------------- ADMIN ACTION HANDLER (FIXED) ----------------
+# ---------------- ADMIN PANEL ----------------
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+# memory dict for admin state
+admin_state = {}  # user_id -> {"action": str}
+
+# /admin command
+@dp.message(Command("admin"))
+async def admin_panel(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Not admin")
+        return
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
+        [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
+        [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
+        [InlineKeyboardButton(text="💵 Withdraw / Payout", callback_data="admin_withdraw")],
+        [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")]
+    ])
+    await message.answer("Admin Panel", reply_markup=kb)
+
+# ---------------- CALLBACK HANDLER ----------------
+@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
+async def admin_cb(c: CallbackQuery):
+    action = c.data
+    admin_state[c.from_user.id] = {"action": action}
+
+    if action == "admin_broadcast":
+        await c.message.answer("📢 Send broadcast message (text/photo/video):")
+    elif action in ["admin_ban", "admin_unban", "admin_vip"]:
+        await c.message.answer("Send the **user ID** (digits only):")
+    elif action == "admin_view_users":
+        async with db_pool.acquire() as con:
+            users = await con.fetch("SELECT user_id, name, premium, referrals FROM users")
+        if not users:
+            await c.message.answer("No users found")
+            return
+        text = "👥 Users:\n\n" + "\n".join(
+            f"ID: {u['user_id']}, Name: {u['name'] or 'N/A'}, VIP: {'YES' if u['premium'] else 'NO'}, Referrals: {u['referrals']}"
+            for u in users
+        )
+        await c.message.answer(text)
+    elif action == "admin_withdraw":
+        async with db_pool.acquire() as con:
+            total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log") or 0
+        await c.message.answer(
+            f"💵 Total Stars collected: {total_stars}\n"
+            f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
+            "After payout, type 'confirm payout' to reset stars."
+        )
+    await c.answer()
+
+# ---------------- ADMIN ACTION HANDLER ----------------
 @dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
     state = admin_state[message.from_user.id]
     action = state["action"]
 
     try:
-        # ---------------- BAN / UNBAN / VIP ----------------
+        # -------- BAN / UNBAN / VIP --------
         if action in ["admin_ban", "admin_unban", "admin_vip"]:
             text = message.text.strip()
             if not text.isdigit():
@@ -667,7 +715,7 @@ async def admin_action(message: types.Message):
                 await update_user(uid, "badge_type", "admin")
                 await message.answer(f"👑 VIP granted to user {uid}.")
 
-        # ---------------- BROADCAST ----------------
+        # -------- BROADCAST --------
         elif action == "admin_broadcast":
             async with db_pool.acquire() as con:
                 users = await con.fetch("SELECT user_id FROM users")
@@ -724,7 +772,7 @@ async def admin_action(message: types.Message):
                             parse_mode="HTML"
                         )
                     success += 1
-                    await asyncio.sleep(0.05)  # avoid flood
+                    await asyncio.sleep(0.05)
                 except Exception as e:
                     failed += 1
                     print(f"Broadcast failed for {u['user_id']}: {e}")
@@ -738,8 +786,16 @@ async def admin_action(message: types.Message):
         await message.answer(f"❌ Error: {e}")
 
     finally:
-        # Clear admin state no matter what
+        # Clear admin state
         admin_state.pop(message.from_user.id, None)
+
+# ---------------- CONFIRM PAYOUT ----------------
+@dp.message(lambda m: m.from_user.id == ADMIN_ID and m.text.lower() == "confirm payout")
+async def confirm_payout(message: types.Message):
+    async with db_pool.acquire() as con:
+        await con.execute("DELETE FROM stars_log")
+    await message.answer("✅ Payout confirmed. All star credits reset to 0.")
+
 
 
 
@@ -774,6 +830,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
