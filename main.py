@@ -188,6 +188,20 @@ async def start(message: types.Message):
     else:
         await message.answer("💜 Welcome back!", reply_markup=main_keyboard())
 
+ # ---------------- STARS GIFT MENU ----------------
+@dp.message(lambda m: m.text == "🎁 Send Stars as Gift")
+async def stars_menu(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ 10 Stars", callback_data="stars_10")],
+        [InlineKeyboardButton(text="⭐ 50 Stars", callback_data="stars_50")],
+        [InlineKeyboardButton(text="⭐ 100 Stars", callback_data="stars_100")],
+    ])
+
+    await message.answer(
+        "🎁 Support Minglo Bot\n\n"
+        "Stars help us run & improve the bot 💜",
+        reply_markup=kb
+    
 # ---------------- PROFILE FLOW (SAFE) ----------------
 @dp.message(
     lambda m:
@@ -195,11 +209,12 @@ async def start(message: types.Message):
         not m.text.startswith("/") and
         m.from_user.id not in active_chats and
         m.from_user.id not in admin_state and   # 🔥 VERY IMPORTANT
-        m.text not in [
-            "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
-            "📢 Invite & Earn Premium", "💎 VIP Status",
-            "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
-        ]
+       m.text not in [
+    "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
+    "📢 Invite & Earn Premium", "🎁 Send Stars as Gift",
+    "💎 VIP Status",
+    "⏭ Next", "❌ Stop", "🚫 Block & Report", "✅ Unblock"
+]
 )
 
 async def profile_flow(message: types.Message):
@@ -466,20 +481,7 @@ async def vip_status(message: types.Message):
         f"👥 Referrals: {user['referrals']}/{PREMIUM_REFERRALS}\n\n"
         f"🎁 VIP Features:\n{features_text}"
     )
- # ---------------- STARS GIFT MENU ----------------
-@dp.message(lambda m: m.text == "🎁 Send Stars as Gift")
-async def stars_menu(message: types.Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ 10 Stars", callback_data="stars_10")],
-        [InlineKeyboardButton(text="⭐ 50 Stars", callback_data="stars_50")],
-        [InlineKeyboardButton(text="⭐ 100 Stars", callback_data="stars_100")],
-    ])
-
-    await message.answer(
-        "🎁 Support Minglo Bot\n\n"
-        "Stars help us run & improve the bot 💜",
-        reply_markup=kb
-    )
+)
 
 # ---------------- SUPPORT ----------------
 @dp.message(Command("support"))
@@ -706,6 +708,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
