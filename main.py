@@ -472,11 +472,11 @@ async def admin_cb(c: CallbackQuery):
 async def admin_action(message: types.Message):
     state = admin_state[message.from_user.id]
     action = state["action"]
-    text = message.text.strip()
 
     try:
         # ---------------- BAN / UNBAN / VIP ----------------
         if action in ["admin_ban", "admin_unban", "admin_vip"]:
+            text = message.text.strip()
             if not text.isdigit():
                 await message.answer("❌ Invalid user ID")
                 return
@@ -505,24 +505,22 @@ async def admin_action(message: types.Message):
 
             for u in users:
                 try:
-                    # check message type
-                    if message.content_type == "text":
-                        await bot.send_message(u["user_id"], text)
-                    elif message.content_type == "photo":
-                        await bot.send_photo(u["user_id"], message.photo[-1].file_id, caption=text or "")
-                    elif message.content_type == "video":
-                        await bot.send_video(u["user_id"], message.video.file_id, caption=text or "")
+                    # TEXT
+                    if message.text:
+                        await bot.send_message(u["user_id"], message.text)
+                    # PHOTO
+                    elif message.photo:
+                        await bot.send_photo(u["user_id"], message.photo[-1].file_id, caption=message.caption or "")
+                    # VIDEO
+                    elif message.video:
+                        await bot.send_video(u["user_id"], message.video.file_id, caption=message.caption or "")
                     success += 1
-                    await asyncio.sleep(0.05)  # rate limit safe
+                    await asyncio.sleep(0.05)
                 except Exception as e:
                     failed += 1
                     print("Broadcast failed:", e)
 
-            await message.answer(
-                f"📢 Broadcast completed\n"
-                f"✅ Sent: {success}\n"
-                f"❌ Failed: {failed}"
-            )
+            await message.answer(f"📢 Broadcast completed\n✅ Sent: {success}\n❌ Failed: {failed}")
 
     except Exception as e:
         await message.answer(f"❌ Error: {e}")
@@ -539,6 +537,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
