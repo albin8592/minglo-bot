@@ -166,6 +166,7 @@ async def start(message: types.Message):
 @dp.message(
     lambda m:
         m.text and
+        not m.text.startswith("/") and   # 🔥 ADD THIS LINE
         m.from_user.id not in active_chats and
         m.text not in [
             "🔀 Random Chat (Free)", "👧 Find Girls", "👦 Find Boys",
@@ -418,16 +419,21 @@ async def admin_panel(message: types.Message):
     ])
     await message.answer("Admin Panel", reply_markup=kb)
 
-@dp.callback_query(lambda c: c.data in ["bc","ban","unban","vip"])
+@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data in ["bc","ban","unban","vip"])
 async def admin_cb(c: CallbackQuery):
-    admin_state[ADMIN_ID] = c.data
-    await c.message.answer("Send user id / message")
+    admin_state[c.from_user.id] = c.data
+
+    if c.data == "bc":
+        await c.message.answer("📢 Send broadcast message")
+    else:
+        await c.message.answer("Send user ID")
+
     await c.answer()
 
-@dp.message(lambda m: m.from_user.id == ADMIN_ID and ADMIN_ID in admin_state)
+@dp.message(lambda m: m.from_user.id in admin_state)
 async def admin_action(message: types.Message):
-    act = admin_state.pop(ADMIN_ID)
-    if act == "ban":
+    act = admin_state.pop(message.from_user.id)
+        if act == "ban":
         await ban_user(int(message.text))
         await message.answer("🚫 Banned")
     elif act == "unban":
@@ -453,6 +459,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
