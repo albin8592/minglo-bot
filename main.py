@@ -1,4 +1,4 @@
-eniku ella users dta kittnam    ipol ullathu load akunnillaaaa  onnunkil avidottelum transfer akki varunnapole     import os, asyncio, random, asyncpg
+import os, asyncio, random, asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import (
@@ -876,6 +876,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
