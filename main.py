@@ -1,4 +1,4 @@
-import os, asyncio, random, asyncpg
+eniku ella users dta kittnam    ipol ullathu load akunnillaaaa  onnunkil avidottelum transfer akki varunnapole     import os, asyncio, random, asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import (
@@ -393,27 +393,18 @@ async def next_chat(message: types.Message):
         await try_match(uid, waiting_random, None, message)
 
 
-
 @dp.message(lambda m: m.text == "❌ Stop")
 async def stop_chat(message: types.Message):
     uid = message.from_user.id
-
-    # Remove user from any waiting queues
     remove_from_all_queues(uid)
 
-    # End active chat if any
     if uid in active_chats:
-        partner_id = active_chats.pop(uid)
-        if partner_id:
-            active_chats.pop(partner_id, None)
-            remove_from_all_queues(partner_id)
-            await safe_send(partner_id, "❌ Your partner ended the chat")
-
-    # Clear user mode
-    user_mode.pop(uid, None)
+        pid = active_chats.pop(uid)
+        active_chats.pop(pid, None)
+        remove_from_all_queues(pid)
+        await bot.send_message(pid, "❌ Chat ended")
 
     await message.answer("✅ Chat stopped")
-
 
 # ---------------- BLOCK / UNBLOCK ----------------
 @dp.message(lambda m: m.text == "🚫 Block & Report")
@@ -658,14 +649,14 @@ async def admin_cb(c: CallbackQuery):
 
 
 # ---------------- ADMIN EXPORT CSV ----------------
-import tempfile
 import csv
-import os
-from aiogram import types
+import tempfile
 
 @dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data == "admin_export_csv")
-async def export_users_csv(c: types.CallbackQuery):
+async def export_users_csv(c: CallbackQuery):
     async with db_pool.acquire() as con:
+        # Total users count
+        total_users = await con.fetchval("SELECT COUNT(*) FROM users")
         users = await con.fetch("""
             SELECT user_id, name, age, place, gender, premium, referrals
             FROM users
@@ -677,9 +668,8 @@ async def export_users_csv(c: types.CallbackQuery):
         await c.answer()
         return
 
-    # 📝 Create a temp CSV file with utf-8-sig for Malayalam support
-    with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False, suffix=".csv") as f:
-        file_path = f.name
+    import csv, tempfile, os
+    with tempfile.NamedTemporaryFile(mode="w+", newline="", suffix=".csv", delete=False) as f:
         writer = csv.writer(f)
         writer.writerow(["User ID", "Name", "Age", "Place", "Gender", "Premium", "Referrals"])
         for u in users:
@@ -692,21 +682,24 @@ async def export_users_csv(c: types.CallbackQuery):
                 "YES" if u["premium"] else "NO",
                 u["referrals"]
             ])
+        file_path = f.name
 
-    # 📤 Send CSV to admin
+    # close file before sending
+    f.close()
+
+    # send document
     try:
         await bot.send_document(
             chat_id=c.from_user.id,
             document=types.FSInputFile(file_path),
-            caption=f"📥 Users Export (CSV) | Total users: {len(users)}"
+            caption=f"📥 Users Export (CSV) | Total users: {total_users}"
         )
-        await c.answer("✅ CSV Export സഫലമായി അയച്ചു")
     except Exception as e:
-        await c.message.answer(f"❌ CSV അയയ്ക്കാന്‍ പറ്റിയില്ല: {e}")
+        await c.message.answer(f"❌ Failed to send CSV: {e}")
+
     finally:
-        # 🔥 Remove temp file after sending
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        os.remove(file_path)
+        await c.answer("✅ CSV exported")
 
 
 
@@ -883,10 +876,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-
-
 
 
 
