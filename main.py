@@ -394,6 +394,13 @@ async def next_chat(message: types.Message):
 
 
 @dp.message(lambda m: m.text == "❌ Stop")
+async def safe_send(uid, text):
+    try:
+        await bot.send_message(uid, text, reply_markup=main_keyboard())
+    except Exception:
+        pass
+
+@dp.message(lambda m: m.text == "❌ Stop")
 async def stop_chat(message: types.Message):
     uid = message.from_user.id
     remove_from_all_queues(uid)
@@ -402,7 +409,11 @@ async def stop_chat(message: types.Message):
         pid = active_chats.pop(uid)
         active_chats.pop(pid, None)
         remove_from_all_queues(pid)
-        await bot.send_message(pid, "❌ Chat ended")
+
+        if pid:
+            await safe_send(pid, "❌ Your partner ended the chat")
+
+    await message.answer("✅ Chat stopped")
 
     await message.answer("✅ Chat stopped")
 
@@ -874,6 +885,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
