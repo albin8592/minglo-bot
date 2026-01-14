@@ -7,6 +7,19 @@ from aiogram.types import (
 )
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from aiogram.exceptions import TelegramForbiddenError
+
+async def safe_send(bot, user_id, text, **kwargs):
+    try:
+        await bot.send_message(user_id, text, **kwargs)
+        return True
+    except TelegramForbiddenError:
+        print(f"🚫 User {user_id} blocked the bot")
+        return False
+    except Exception as e:
+        print(f"❗ Send error to {user_id}: {e}")
+        return False
+
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -381,7 +394,8 @@ async def next_chat(message: types.Message):
         pid = active_chats.pop(uid)
         active_chats.pop(pid, None)
         remove_from_all_queues(pid)
-        await bot.send_message(pid, "❌ Partner skipped")
+        await safe_send(bot, pid, "❌ Partner skipped")
+
 
     mode = user_mode.get(uid)
 
@@ -874,6 +888,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
