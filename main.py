@@ -332,7 +332,8 @@ async def try_match(uid, queue, want_gender, message):
             pass
 
         # notify both
-       ok1 = await safe_send(
+  # notify both
+ok1 = await safe_send(
     bot, uid,
     f"🎉 Match Found\n👤 {mask(other)}",
     reply_markup=main_keyboard()
@@ -343,6 +344,7 @@ ok2 = await safe_send(
     f"🎉 Match Found\n👤 {mask(me)}",
     reply_markup=main_keyboard()
 )
+
 
 # if either side blocked → cancel chat
 if not ok1 or not ok2:
@@ -426,10 +428,10 @@ async def stop_chat(message: types.Message):
     remove_from_all_queues(uid)
 
     if uid in active_chats:
-        pid = active_chats.pop(uid)
-        active_chats.pop(pid, None)
-        remove_from_all_queues(pid)
-       await safe_send(bot, pid, "❌ Chat ended")
+    pid = active_chats.pop(uid)
+    active_chats.pop(pid, None)
+    remove_from_all_queues(pid)
+    await safe_send(bot, pid, "❌ Chat ended")
 
     await message.answer("✅ Chat stopped")
 
@@ -901,6 +903,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
