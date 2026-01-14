@@ -112,6 +112,7 @@ async def log_message(sender, receiver, text):
 waiting_random = set()       # Random chat (boys + girls)
 waiting_find_girls = set()  # Girls waiting (for Find Girls)
 waiting_find_boys = set()   # Boys waiting (for Find Boys)
+link_warn_count = {}  # uid -> warning count
 
 active_chats = {}
 blocked = {}
@@ -158,6 +159,15 @@ def mask(user):
         masked += " 👑"
     return masked
 
+import re
+
+def contains_telegram_link(text: str) -> bool:
+    patterns = [
+        r"@[\w\d_]+",
+        r"t\.me\/\w+",
+        r"telegram\.me\/\w+"
+    ]
+    return any(re.search(p, text, re.IGNORECASE) for p in patterns)
 
 # ---------------- START + REFERRAL ----------------
 @dp.message(Command("start"))
@@ -539,17 +549,36 @@ async def relay_all(message: types.Message):
     if uid in blocked.get(pid, []) or pid in blocked.get(uid, []):
         return
 
+    # 🚨 Telegram link detection
+    if message.text and contains_telegram_link(message.text):
+        cnt = link_warn_count.get(uid, 0) + 1
+        link_warn_count[uid] = cnt
+
+        if cnt >= 3:
+            await ban_user(uid)
+            await message.answer("🚫 You are banned for sharing Telegram links.")
+
+            # end chat
+            active_chats.pop(uid, None)
+            active_chats.pop(pid, None)
+            await bot.send_message(pid, "❌ Partner was banned")
+        else:
+            await message.answer(f"⚠️ Warning {cnt}/3\nTelegram links not allowed.")
+        return
+
     try:
         await message.copy_to(pid)
+        await log_message(uid, pid, message.text or "")
     except Exception as e:
         print("RELAY ERROR:", e)
+
 
 
 # ---------------- ADMIN PANEL ----------------
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # memory dict for admin state
-admin_state = {}  # user_id -> {"action": str}
+ # user_id -> {"action": str}
 
 # /admin command
 @dp.message(Command("admin"))
@@ -559,13 +588,15 @@ async def admin_panel(message: types.Message):
         return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
-        [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
-        [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
-        [InlineKeyboardButton(text="💵 Withdraw / Payout", callback_data="admin_withdraw")],
-        [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")]
-    ])
+    [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast")],
+    [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
+    [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
+    [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
+    [InlineKeyboardButton(text="💵 Withdraw / Payout", callback_data="admin_withdraw")],
+    [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")],
+    [InlineKeyboardButton(text="📥 Export Users (CSV)", callback_data="admin_export_csv")]
+])
+
     await message.answer("Admin Panel", reply_markup=kb)
 
 
@@ -579,17 +610,32 @@ async def admin_cb(c: CallbackQuery):
         await c.message.answer("📢 Send broadcast message:")
     elif action in ["admin_ban", "admin_unban", "admin_vip"]:
         await c.message.answer("Send the **user ID** (digits only):")
+
     elif action == "admin_view_users":
-        async with db_pool.acquire() as con:
-            users = await con.fetch("SELECT user_id, name, premium, referrals FROM users")
-        if not users:
-            await c.message.answer("No users found")
-            return
-        text = "👥 Users:\n\n" + "\n".join(
-            f"ID: {u['user_id']}, Name: {u['name'] or 'N/A'}, VIP: {'YES' if u['premium'] else 'NO'}, Referrals: {u['referrals']}"
-            for u in users
-        )
-        await c.message.answer(text)
+    async with db_pool.acquire() as con:
+        users = await con.fetch("""
+            SELECT user_id, name, premium, referrals
+            FROM users
+            ORDER BY user_id DESC
+            LIMIT 25
+        """)
+
+    if not users:
+        await c.message.answer("❌ No users found")
+        await c.answer()
+        return
+
+    text = "👥 Latest Users:\n\n" + "\n".join(
+        f"ID: {u['user_id']}\n"
+        f"Name: {u['name'] or 'N/A'}\n"
+        f"VIP: {'YES' if u['premium'] else 'NO'}\n"
+        f"Referrals: {u['referrals']}\n"
+        "────────────"
+        for u in users
+    )
+
+    await c.message.answer(text)
+    await c.answer()
 
     elif action == "admin_withdraw":
         async with db_pool.acquire() as con:
@@ -602,7 +648,53 @@ async def admin_cb(c: CallbackQuery):
             "After payout, type 'confirm payout' to reset stars."
         )
         await c.answer()
+          elif action == "admin_withdraw":
+        ...
+        await c.answer()
 
+    await c.answer()
+
+# ---------------- ADMIN EXPORT CSV ----------------
+import csv
+import tempfile
+
+@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data == "admin_export_csv")
+async def export_users_csv(c: CallbackQuery):
+    async with db_pool.acquire() as con:
+        users = await con.fetch("""
+            SELECT user_id, name, age, place, gender, premium, referrals
+            FROM users
+            ORDER BY user_id DESC
+        """)
+
+    if not users:
+        await c.message.answer("❌ No users to export")
+        await c.answer()
+        return
+
+    with tempfile.NamedTemporaryFile(mode="w+", newline="", suffix=".csv", delete=False) as f:
+        writer = csv.writer(f)
+        writer.writerow(["User ID", "Name", "Age", "Place", "Gender", "Premium", "Referrals"])
+        for u in users:
+            writer.writerow([
+                u["user_id"],
+                u["name"] or "",
+                u["age"] or "",
+                u["place"] or "",
+                u["gender"] or "",
+                "YES" if u["premium"] else "NO",
+                u["referrals"]
+            ])
+        file_path = f.name
+
+    await bot.send_document(
+        chat_id=c.from_user.id,
+        document=types.FSInputFile(file_path),
+        caption="📥 Users Export (CSV)"
+    )
+
+    os.remove(file_path)
+    await c.answer("✅ CSV exported")
 
 
 # ---------------- STARS CALLBACK → INVOICE ----------------
@@ -632,60 +724,8 @@ async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
     await pre_checkout_query.answer(ok=True)
 
 
-# admin action handler
-# ---------------- ADMIN PANEL ----------------
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-# memory dict for admin state
-admin_state = {}  # user_id -> {"action": str}
 
-# /admin command
-@dp.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Not admin")
-        return
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Broadcast", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="🚫 Ban User", callback_data="admin_ban")],
-        [InlineKeyboardButton(text="✅ Unban User", callback_data="admin_unban")],
-        [InlineKeyboardButton(text="👑 Give VIP", callback_data="admin_vip")],
-        [InlineKeyboardButton(text="💵 Withdraw / Payout", callback_data="admin_withdraw")],
-        [InlineKeyboardButton(text="👥 View Users", callback_data="admin_view_users")]
-    ])
-    await message.answer("Admin Panel", reply_markup=kb)
-
-# ---------------- CALLBACK HANDLER ----------------
-@dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
-async def admin_cb(c: CallbackQuery):
-    action = c.data
-    admin_state[c.from_user.id] = {"action": action}
-
-    if action == "admin_broadcast":
-        await c.message.answer("📢 Send broadcast message (text/photo/video):")
-    elif action in ["admin_ban", "admin_unban", "admin_vip"]:
-        await c.message.answer("Send the **user ID** (digits only):")
-    elif action == "admin_view_users":
-        async with db_pool.acquire() as con:
-            users = await con.fetch("SELECT user_id, name, premium, referrals FROM users")
-        if not users:
-            await c.message.answer("No users found")
-            return
-        text = "👥 Users:\n\n" + "\n".join(
-            f"ID: {u['user_id']}, Name: {u['name'] or 'N/A'}, VIP: {'YES' if u['premium'] else 'NO'}, Referrals: {u['referrals']}"
-            for u in users
-        )
-        await c.message.answer(text)
-    elif action == "admin_withdraw":
-        async with db_pool.acquire() as con:
-            total_stars = await con.fetchval("SELECT SUM(stars) FROM stars_log") or 0
-        await c.message.answer(
-            f"💵 Total Stars collected: {total_stars}\n"
-            f"Use your bank / UPI ({ADMIN_BANK}) to transfer equivalent amount to your account.\n"
-            "After payout, type 'confirm payout' to reset stars."
-        )
-    await c.answer()
 
 # ---------------- ADMIN ACTION HANDLER ----------------
 @dp.message(lambda m: m.from_user.id in admin_state)
@@ -830,6 +870,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
