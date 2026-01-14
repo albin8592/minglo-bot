@@ -680,7 +680,7 @@ async def export_users_csv(c: CallbackQuery):
                 u["referrals"]
             ])
         file_path = f.name
-
+    f.close()
     await bot.send_document(
         chat_id=c.from_user.id,
         document=types.FSInputFile(file_path),
@@ -864,6 +864,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
