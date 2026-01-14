@@ -649,11 +649,13 @@ async def admin_cb(c: CallbackQuery):
 
 
 # ---------------- ADMIN EXPORT CSV ----------------
-import csv
 import tempfile
+import csv
+import os
+from aiogram import types
 
 @dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data == "admin_export_csv")
-async def export_users_csv(c: CallbackQuery):
+async def export_users_csv(c: types.CallbackQuery):
     async with db_pool.acquire() as con:
         users = await con.fetch("""
             SELECT user_id, name, age, place, gender, premium, referrals
@@ -666,10 +668,9 @@ async def export_users_csv(c: CallbackQuery):
         await c.answer()
         return
 
-    # Use a simple filename in current directory
-    file_path = "users_export.csv"
-
-    with open(file_path, mode="w", newline="", encoding="utf-8") as f:
+    # 📝 Create a temp CSV file with utf-8-sig for Malayalam support
+    with tempfile.NamedTemporaryFile(mode="w", newline="", encoding="utf-8-sig", delete=False, suffix=".csv") as f:
+        file_path = f.name
         writer = csv.writer(f)
         writer.writerow(["User ID", "Name", "Age", "Place", "Gender", "Premium", "Referrals"])
         for u in users:
@@ -683,18 +684,21 @@ async def export_users_csv(c: CallbackQuery):
                 u["referrals"]
             ])
 
-    # Send document
+    # 📤 Send CSV to admin
     try:
         await bot.send_document(
             chat_id=c.from_user.id,
             document=types.FSInputFile(file_path),
             caption=f"📥 Users Export (CSV) | Total users: {len(users)}"
         )
+        await c.answer("✅ CSV Export സഫലമായി അയച്ചു")
     except Exception as e:
-        await c.message.answer(f"❌ Failed to send CSV: {e}")
+        await c.message.answer(f"❌ CSV അയയ്ക്കാന്‍ പറ്റിയില്ല: {e}")
     finally:
-        os.remove(file_path)
-        await c.answer("✅ CSV exported")
+        # 🔥 Remove temp file after sending
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
 
 
 # ---------------- STARS CALLBACK → INVOICE ----------------
@@ -870,6 +874,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
