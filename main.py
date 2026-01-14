@@ -393,29 +393,27 @@ async def next_chat(message: types.Message):
         await try_match(uid, waiting_random, None, message)
 
 
-@dp.message(lambda m: m.text == "❌ Stop")
-async def safe_send(uid, text):
-    try:
-        await bot.send_message(uid, text, reply_markup=main_keyboard())
-    except Exception:
-        pass
 
 @dp.message(lambda m: m.text == "❌ Stop")
 async def stop_chat(message: types.Message):
     uid = message.from_user.id
+
+    # Remove user from any waiting queues
     remove_from_all_queues(uid)
 
+    # End active chat if any
     if uid in active_chats:
-        pid = active_chats.pop(uid)
-        active_chats.pop(pid, None)
-        remove_from_all_queues(pid)
+        partner_id = active_chats.pop(uid)
+        if partner_id:
+            active_chats.pop(partner_id, None)
+            remove_from_all_queues(partner_id)
+            await safe_send(partner_id, "❌ Your partner ended the chat")
 
-        if pid:
-            await safe_send(pid, "❌ Your partner ended the chat")
+    # Clear user mode
+    user_mode.pop(uid, None)
 
     await message.answer("✅ Chat stopped")
 
-    await message.answer("✅ Chat stopped")
 
 # ---------------- BLOCK / UNBLOCK ----------------
 @dp.message(lambda m: m.text == "🚫 Block & Report")
@@ -885,6 +883,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
