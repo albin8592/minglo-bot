@@ -655,6 +655,8 @@ import tempfile
 @dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data == "admin_export_csv")
 async def export_users_csv(c: CallbackQuery):
     async with db_pool.acquire() as con:
+        # Total users count
+        total_users = await con.fetchval("SELECT COUNT(*) FROM users")
         users = await con.fetch("""
             SELECT user_id, name, age, place, gender, premium, referrals
             FROM users
@@ -666,6 +668,7 @@ async def export_users_csv(c: CallbackQuery):
         await c.answer()
         return
 
+    import csv, tempfile, os
     with tempfile.NamedTemporaryFile(mode="w+", newline="", suffix=".csv", delete=False) as f:
         writer = csv.writer(f)
         writer.writerow(["User ID", "Name", "Age", "Place", "Gender", "Premium", "Referrals"])
@@ -680,15 +683,24 @@ async def export_users_csv(c: CallbackQuery):
                 u["referrals"]
             ])
         file_path = f.name
-    f.close()
-    await bot.send_document(
-        chat_id=c.from_user.id,
-        document=types.FSInputFile(file_path),
-        caption="📥 Users Export (CSV)"
-    )
 
-    os.remove(file_path)
-    await c.answer("✅ CSV exported")
+    # close file before sending
+    f.close()
+
+    # send document
+    try:
+        await bot.send_document(
+            chat_id=c.from_user.id,
+            document=types.FSInputFile(file_path),
+            caption=f"📥 Users Export (CSV) | Total users: {total_users}"
+        )
+    except Exception as e:
+        await c.message.answer(f"❌ Failed to send CSV: {e}")
+
+    finally:
+        os.remove(file_path)
+        await c.answer("✅ CSV exported")
+
 
 
 # ---------------- STARS CALLBACK → INVOICE ----------------
@@ -864,6 +876,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
