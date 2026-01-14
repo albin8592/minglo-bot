@@ -7,19 +7,6 @@ from aiogram.types import (
 )
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from aiogram.exceptions import TelegramForbiddenError
-
-async def safe_send(bot, user_id, text, **kwargs):
-    try:
-        await bot.send_message(user_id, text, **kwargs)
-        return True
-    except TelegramForbiddenError:
-        print(f"🚫 User {user_id} blocked the bot")
-        return False
-    except Exception as e:
-        print(f"❗ Send error to {user_id}: {e}")
-        return False
-
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -332,17 +319,11 @@ async def try_match(uid, queue, want_gender, message):
             pass
 
         # notify both
-  # notify both
-# inside match-found
-ok1 = await safe_send(bot, uid, f"🎉 Match Found\n👤 {mask(other)}", reply_markup=main_keyboard())
-ok2 = await safe_send(bot, other_id, f"🎉 Match Found\n👤 {mask(me)}", reply_markup=main_keyboard())
-
-# if either side blocked → cancel chat
-if not ok1 or not ok2:
-    active_chats.pop(uid, None)
-    active_chats.pop(other_id, None)
-    return
-
+        try:
+            await bot.send_message(uid, f"🎉 Match Found\n👤 {mask(other)}", reply_markup=main_keyboard())
+            await bot.send_message(other_id, f"🎉 Match Found\n👤 {mask(me)}", reply_markup=main_keyboard())
+        except Exception as e:
+            print(f"MATCH NOTIFY ERROR: {e}")
 
         return
 
@@ -400,8 +381,7 @@ async def next_chat(message: types.Message):
         pid = active_chats.pop(uid)
         active_chats.pop(pid, None)
         remove_from_all_queues(pid)
-        await safe_send(bot, pid, "❌ Partner skipped")
-
+        await bot.send_message(pid, "❌ Partner skipped")
 
     mode = user_mode.get(uid)
 
@@ -418,11 +398,11 @@ async def stop_chat(message: types.Message):
     uid = message.from_user.id
     remove_from_all_queues(uid)
 
-  if uid in active_chats:
-    pid = active_chats.pop(uid)
-    active_chats.pop(pid, None)
-    remove_from_all_queues(pid)
-    await safe_send(bot, pid, "❌ Chat ended")
+    if uid in active_chats:
+        pid = active_chats.pop(uid)
+        active_chats.pop(pid, None)
+        remove_from_all_queues(pid)
+        await bot.send_message(pid, "❌ Chat ended")
 
     await message.answer("✅ Chat stopped")
 
@@ -434,7 +414,7 @@ async def block_user(message: types.Message):
         pid = active_chats.pop(uid)
         active_chats.pop(pid, None)
         blocked.setdefault(uid, []).append(pid)
-        await safe_send(bot, pid, "🚫 You were blocked")
+        await bot.send_message(pid, "🚫 You were blocked")
     await message.answer("🚫 User blocked")
 
 # ---------------- UNBLOCK ----------------
@@ -581,7 +561,7 @@ async def relay_all(message: types.Message):
             # end chat
             active_chats.pop(uid, None)
             active_chats.pop(pid, None)
-            await safe_send(bot, pid, "❌ Partner was banned")
+            await bot.send_message(pid, "❌ Partner was banned")
         else:
             await message.answer(f"⚠️ Warning {cnt}/3\nTelegram links not allowed.")
         return
@@ -894,11 +874,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-
-
-
 
 
 
