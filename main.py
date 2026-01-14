@@ -600,7 +600,6 @@ async def admin_panel(message: types.Message):
     await message.answer("Admin Panel", reply_markup=kb)
 
 
-# callback for buttons
 @dp.callback_query(lambda c: c.from_user.id == ADMIN_ID and c.data.startswith("admin_"))
 async def admin_cb(c: CallbackQuery):
     action = c.data
@@ -610,32 +609,31 @@ async def admin_cb(c: CallbackQuery):
         await c.message.answer("📢 Send broadcast message:")
     elif action in ["admin_ban", "admin_unban", "admin_vip"]:
         await c.message.answer("Send the **user ID** (digits only):")
-
     elif action == "admin_view_users":
-    async with db_pool.acquire() as con:
-        users = await con.fetch("""
-            SELECT user_id, name, premium, referrals
-            FROM users
-            ORDER BY user_id DESC
-            LIMIT 25
-        """)
+        async with db_pool.acquire() as con:
+            users = await con.fetch("""
+                SELECT user_id, name, premium, referrals
+                FROM users
+                ORDER BY user_id DESC
+                LIMIT 25
+            """)
 
-    if not users:
-        await c.message.answer("❌ No users found")
+        if not users:
+            await c.message.answer("❌ No users found")
+            await c.answer()
+            return
+
+        text = "👥 Latest Users:\n\n" + "\n".join(
+            f"ID: {u['user_id']}\n"
+            f"Name: {u['name'] or 'N/A'}\n"
+            f"VIP: {'YES' if u['premium'] else 'NO'}\n"
+            f"Referrals: {u['referrals']}\n"
+            "────────────"
+            for u in users
+        )
+
+        await c.message.answer(text)
         await c.answer()
-        return
-
-    text = "👥 Latest Users:\n\n" + "\n".join(
-        f"ID: {u['user_id']}\n"
-        f"Name: {u['name'] or 'N/A'}\n"
-        f"VIP: {'YES' if u['premium'] else 'NO'}\n"
-        f"Referrals: {u['referrals']}\n"
-        "────────────"
-        for u in users
-    )
-
-    await c.message.answer(text)
-    await c.answer()
 
     elif action == "admin_withdraw":
         async with db_pool.acquire() as con:
@@ -648,11 +646,7 @@ async def admin_cb(c: CallbackQuery):
             "After payout, type 'confirm payout' to reset stars."
         )
         await c.answer()
-          elif action == "admin_withdraw":
-        ...
-        await c.answer()
 
-    await c.answer()
 
 # ---------------- ADMIN EXPORT CSV ----------------
 import csv
@@ -870,6 +864,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
